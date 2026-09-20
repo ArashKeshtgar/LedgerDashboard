@@ -17,6 +17,11 @@ const PIPELINE_PATH = path.join(JOBSEARCH_DIR, "engine", "pipeline.csv");
 const STAGES_PATH = path.join(JOBSEARCH_DIR, "engine", "pipeline_stages.yml");
 const RECRUITERS_PATH = path.join(JOBSEARCH_DIR, "engine", "target_list.csv");
 
+// A follow-up is logged as a pipeline.csv event too, but it never counts as
+// a stage change — it only marks that action was taken and resets the
+// "needs follow-up" clock computed in withPipeline().
+const FOLLOWUP_KEY = "follow_up";
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -40,9 +45,9 @@ function loadLedger() {
 }
 
 function loadStages() {
-  if (!existsSync(STAGES_PATH)) return { stages: [], terminal: [] };
+  if (!existsSync(STAGES_PATH)) return { stages: [], terminal: [], actions: [] };
   const doc = loadYaml(readFileSync(STAGES_PATH, "utf-8")) || {};
-  return { stages: doc.stages || [], terminal: doc.terminal || [] };
+  return { stages: doc.stages || [], terminal: doc.terminal || [], actions: doc.actions || [] };
 }
 
 function loadPipelineEvents() {
@@ -70,14 +75,23 @@ function appendPipelineEvent({ folder, company, stage, note }) {
   appendFileSync(PIPELINE_PATH, (needsNewline ? "\n" : "") + line + "\n", "utf-8");
 }
 
-// Attach stage + history to each ledger row. The CURRENT stage is the last
-// event for that folder in file order (the file is append-only), so a later
-// line always wins over an earlier one.
+// Attach stage + follow-up state to each ledger row. The CURRENT stage is
+// the last STAGE-CHANGING event for that folder in file order (the file is
+// append-only, so a later line always wins) — a "follow_up" event is logged
+// the same append-only way but never counts as a stage change; it only
+// resets the "needs follow-up" clock below.
 function withPipeline(rows) {
   const events = loadPipelineEvents();
   const { stages, terminal } = loadStages();
   const order = new Map(stages.map((s, i) => [s.key, i]));
   const terminalKeys = new Set(terminal.map((t) => t.key));
+  // "Waiting on them" stages: you've acted, now the clock is on the
+  // employer. Marked in pipeline_stages.yml (waiting: true) rather than
+  // hardcoded here, so the two stay in sync.
+  const waitingKeys = new Set(stages.filter((s) => s.waiting).map((s) => s.key));
+  // Follow-up guidance (industry standard) is ~7-10 days of silence before a
+  // short check-in email is warranted.
+  const FOLLOWUP_THRESHOLD_DAYS = 7;
 
   const byFolder = new Map();
   events.forEach((e) => {
@@ -87,36 +101,47 @@ function withPipeline(rows) {
   });
 
   const today = new Date();
+  // A date can be in the future (an interview already booked), so report
+  // past and future separately instead of clamping both to zero.
+  function daysSince(dateStr) {
+    if (!dateStr) return { days: null, until: null };
+    const d = new Date(dateStr);
+    if (isNaN(d)) return { days: null, until: null };
+    const diff = Math.round((today - d) / 86400000);
+    return diff >= 0 ? { days: diff, until: null } : { days: null, until: -diff };
+  }
+
   return rows.map((r) => {
     const history = byFolder.get(r.folder) || [];
-    const last = history.length ? history[history.length - 1] : null;
+    const stageEvents = history.filter((h) => h.stage !== FOLLOWUP_KEY);
+    const last = stageEvents.length ? stageEvents[stageEvents.length - 1] : null;
     const stage = last ? last.stage : r.status || "draft";
-    // A stage date can be in the future (an interview already booked), so
-    // report past and future separately instead of clamping both to zero.
-    let daysInStage = null;
-    let daysUntilStage = null;
-    if (last && last.date) {
-      const d = new Date(last.date);
-      if (!isNaN(d)) {
-        const diff = Math.round((today - d) / 86400000);
-        if (diff >= 0) daysInStage = diff;
-        else daysUntilStage = -diff;
-      }
-    }
-    // "Waiting on them" stages: you've acted, now the clock is on the
-    // employer. Follow-up guidance (industry standard) is ~7-10 days of
-    // silence before a short check-in email is warranted.
-    const WAITING_STAGES = new Set([
-      "applied",
-      "recruiter_screen",
-      "technical_interview",
-      "final_round",
-    ]);
-    const FOLLOWUP_THRESHOLD_DAYS = 7;
+
+    const { days: daysInStage, until: daysUntilStage } = daysSince(last?.date);
+
+    // Follow-ups logged since the card entered its current stage — one from
+    // an earlier stage shouldn't keep resetting today's clock.
+    const followupsInStage = history.filter(
+      (h) => h.stage === FOLLOWUP_KEY && (!last || h.date >= last.date)
+    );
+    const lastFollowup = followupsInStage.length
+      ? followupsInStage[followupsInStage.length - 1]
+      : null;
+    const followupCount = followupsInStage.length;
+    const lastFollowupDate = lastFollowup ? lastFollowup.date : null;
+
+    // A follow-up is action taken, so "waiting on them" restarts from
+    // whichever is more recent: entering the stage, or the last follow-up.
+    const lastActionDate =
+      lastFollowupDate && (!last || lastFollowupDate >= last.date)
+        ? lastFollowupDate
+        : last?.date || null;
+    const { days: daysSinceAction } = daysSince(lastActionDate);
+
     const needsFollowup =
-      WAITING_STAGES.has(stage) &&
-      daysInStage !== null &&
-      daysInStage > FOLLOWUP_THRESHOLD_DAYS;
+      waitingKeys.has(stage) &&
+      daysSinceAction !== null &&
+      daysSinceAction > FOLLOWUP_THRESHOLD_DAYS;
 
     return {
       ...r,
@@ -128,6 +153,9 @@ function withPipeline(rows) {
       daysUntilStage,
       needsFollowup,
       followupThresholdDays: FOLLOWUP_THRESHOLD_DAYS,
+      followupCount,
+      lastFollowupDate,
+      daysSinceAction,
     };
   });
 }
@@ -181,6 +209,30 @@ app.post("/api/pipeline-events", (req, res) => {
     if (!ledgerRow) return res.status(404).json({ error: `Unknown folder: ${folder}` });
 
     appendPipelineEvent({ folder, company: ledgerRow.company, stage, note });
+
+    const updated = withPipeline(loadLedger()).find((r) => r.folder === folder);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/pipeline-events/followup - log that a follow-up was sent, without
+// moving the card to a new stage. Body: { folder, note? }
+app.post("/api/pipeline-events/followup", (req, res) => {
+  try {
+    const { folder, note } = req.body || {};
+    if (!folder) return res.status(400).json({ error: "folder is required" });
+
+    const ledgerRow = loadLedger().find((r) => r.folder === folder);
+    if (!ledgerRow) return res.status(404).json({ error: `Unknown folder: ${folder}` });
+
+    appendPipelineEvent({
+      folder,
+      company: ledgerRow.company,
+      stage: FOLLOWUP_KEY,
+      note: note || "Follow-up sent",
+    });
 
     const updated = withPipeline(loadLedger()).find((r) => r.folder === folder);
     res.json(updated);

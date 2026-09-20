@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchApplications, fetchPipelineStages, moveApplicationStage } from "../api.js";
+import { fetchApplications, fetchPipelineStages, moveApplicationStage, logFollowup } from "../api.js";
 
 function matchColor(score) {
   const n = Number(score);
@@ -16,7 +16,7 @@ function stageAge(app) {
   return "";
 }
 
-function Card({ app, dragging, onDragStart, onDragEnd }) {
+function Card({ app, dragging, onDragStart, onDragEnd, canFollowup, onLogFollowup, loggingFollowup }) {
   const cardClass = [
     "pipeline-card",
     app.needsFollowup ? "pipeline-card-followup" : "",
@@ -25,35 +25,56 @@ function Card({ app, dragging, onDragStart, onDragEnd }) {
     .filter(Boolean)
     .join(" ");
   return (
-    <Link
-      to={`/applications/${app.id}`}
+    <div
       className={cardClass}
       draggable
       onDragStart={(e) => onDragStart(e, app)}
       onDragEnd={onDragEnd}
-      title={
-        app.needsFollowup
-          ? `${app.role} — ${app.daysInStage}d with no update, follow-up due`
-          : app.role
-      }
     >
-      {app.needsFollowup && (
-        <div className="pipeline-card-flag">
-          <span aria-hidden="true">⏰</span> Follow up
+      <Link
+        to={`/applications/${app.id}`}
+        className="pipeline-card-link"
+        title={
+          app.needsFollowup
+            ? `${app.role} — ${app.daysInStage}d with no update, follow-up due`
+            : app.role
+        }
+      >
+        {app.needsFollowup && (
+          <div className="pipeline-card-flag">
+            <span aria-hidden="true">⏰</span> Follow up
+          </div>
+        )}
+        <div className="pipeline-card-company">{app.company}</div>
+        <div className="pipeline-card-role">{app.role}</div>
+        {app.followupCount > 0 && (
+          <div className="pipeline-card-followup-meta">
+            🔁 {app.followupCount} sent{app.lastFollowupDate ? ` · last ${app.lastFollowupDate}` : ""}
+          </div>
+        )}
+        <div className="pipeline-card-foot">
+          <span
+            className="pipeline-card-score"
+            style={{ background: matchColor(app.match_score) }}
+          >
+            {app.match_score}%
+          </span>
+          <span className="pipeline-card-meta">{stageAge(app)}</span>
         </div>
-      )}
-      <div className="pipeline-card-company">{app.company}</div>
-      <div className="pipeline-card-role">{app.role}</div>
-      <div className="pipeline-card-foot">
-        <span
-          className="pipeline-card-score"
-          style={{ background: matchColor(app.match_score) }}
+      </Link>
+      {canFollowup && (
+        <button
+          type="button"
+          className={`btn btn-sm rounded-pill w-100 mt-1 pipeline-followup-btn ${
+            app.needsFollowup ? "btn-warning" : "btn-outline-secondary"
+          }`}
+          disabled={loggingFollowup}
+          onClick={() => onLogFollowup(app.folder)}
         >
-          {app.match_score}%
-        </span>
-        <span className="pipeline-card-meta">{stageAge(app)}</span>
-      </div>
-    </Link>
+          {loggingFollowup ? "Logging…" : "🔁 Log follow-up"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -97,6 +118,8 @@ export default function PipelineBoard() {
   const [terminal, setTerminal] = useState([]);
   const [error, setError] = useState(null);
   const [moveError, setMoveError] = useState(null);
+  const [followupError, setFollowupError] = useState(null);
+  const [followupPendingFolder, setFollowupPendingFolder] = useState(null);
 
   // Filters — the board was view-only before, these make it something you
   // can actually narrow down and act on.
@@ -127,6 +150,14 @@ export default function PipelineBoard() {
     if (!rows) return [];
     return [...new Set(rows.map((r) => r.source).filter(Boolean))].sort();
   }, [rows]);
+
+  // Stages marked "waiting: true" in pipeline_stages.yml are the ones
+  // where you've acted and are now waiting on a reply — that's where a
+  // follow-up can be logged, whether or not the 7-day flag has kicked in.
+  const waitingKeys = useMemo(
+    () => new Set(stages.filter((s) => s.waiting).map((s) => s.key)),
+    [stages]
+  );
 
   if (error) return <div className="alert alert-danger">{error}</div>;
   if (!rows) return <div className="text-center py-5 text-muted">Loading…</div>;
@@ -205,6 +236,19 @@ export default function PipelineBoard() {
     setDragOverKey(null);
   }
 
+  async function handleLogFollowup(folder) {
+    setFollowupError(null);
+    setFollowupPendingFolder(folder);
+    try {
+      const updated = await logFollowup(folder);
+      setRows((rs) => rs.map((r) => (r.folder === folder ? { ...r, ...updated } : r)));
+    } catch (e) {
+      setFollowupError(e.message);
+    } finally {
+      setFollowupPendingFolder(null);
+    }
+  }
+
   return (
     <div>
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
@@ -221,6 +265,12 @@ export default function PipelineBoard() {
       {moveError && (
         <div className="alert alert-danger py-2 px-3 mb-3" role="alert">
           {moveError}
+        </div>
+      )}
+
+      {followupError && (
+        <div className="alert alert-danger py-2 px-3 mb-3" role="alert">
+          {followupError}
         </div>
       )}
 
@@ -328,6 +378,9 @@ export default function PipelineBoard() {
                     dragging={draggedFolder === a.folder}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
+                    canFollowup={waitingKeys.has(a.stage)}
+                    onLogFollowup={handleLogFollowup}
+                    loggingFollowup={followupPendingFolder === a.folder}
                   />
                 ))}
                 {cards.length === 0 && (

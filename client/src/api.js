@@ -63,3 +63,16 @@ export async function moveApplicationStage(folder, stage, note = "") {
   }
   return res.json();
 }
+
+export async function logFollowup(folder, note = "") {
+  const res = await fetch(`${API_BASE}/api/pipeline-events/followup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder, note }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Failed to log follow-up (${res.status})`);
+  }
+  return res.json();
+}

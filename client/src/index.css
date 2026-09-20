@@ -413,6 +413,22 @@ body {
   padding: 2px 8px;
   margin-bottom: 6px;
 }
+/* The card is now a plain div (so it can hold both a Link and a button);
+   this is the clickable inner area that used to be the whole card. */
+.pipeline-card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.pipeline-card-followup-meta {
+  font-size: 0.68rem;
+  color: #a5471f;
+  margin-top: 4px;
+}
+.pipeline-followup-btn {
+  font-size: 0.72rem;
+  cursor: pointer;
+}
 /* ---- Pending approval tray ---- */
 .pipeline-pending-row {
   display: grid;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { fetchApplication, fetchPipelineStages, moveApplicationStage } from "../api.js";
+import { fetchApplication, fetchPipelineStages, moveApplicationStage, logFollowup } from "../api.js";
 import StageTimeline from "../components/StageTimeline.jsx";
 
 function Field({ label, value }) {
@@ -20,6 +20,8 @@ export default function ApplicationDetail() {
   const [error, setError] = useState(null);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState(null);
+  const [followupPending, setFollowupPending] = useState(false);
+  const [followupError, setFollowupError] = useState(null);
 
   useEffect(() => {
     setApp(null);
@@ -45,6 +47,28 @@ export default function ApplicationDetail() {
       setApproving(false);
     }
   }
+
+  async function handleLogFollowup() {
+    setFollowupError(null);
+    setFollowupPending(true);
+    try {
+      const updated = await logFollowup(app.folder);
+      setApp((a) => ({ ...a, ...updated }));
+    } catch (e) {
+      setFollowupError(e.message);
+    } finally {
+      setFollowupPending(false);
+    }
+  }
+
+  const waitingKeys = new Set((stages.stages || []).filter((s) => s.waiting).map((s) => s.key));
+  const canFollowup = waitingKeys.has(app.stage);
+  const stageLabels = new Map(
+    [...(stages.stages || []), ...(stages.terminal || []), ...(stages.actions || [])].map((s) => [
+      s.key,
+      s,
+    ])
+  );
 
   return (
     <div>
@@ -129,13 +153,44 @@ export default function ApplicationDetail() {
             />
             {app.stageHistory && app.stageHistory.length > 0 && (
               <ul className="list-unstyled mt-3 mb-0 small text-muted">
-                {app.stageHistory.map((h, i) => (
-                  <li key={i}>
-                    <span className="fw-semibold">{h.date}</span> — {h.stage}
-                    {h.note ? ` · ${h.note}` : ""}
-                  </li>
-                ))}
+                {app.stageHistory.map((h, i) => {
+                  const meta = stageLabels.get(h.stage);
+                  return (
+                    <li key={i}>
+                      <span className="fw-semibold">{h.date}</span> —{" "}
+                      {meta ? `${meta.icon} ${meta.label}` : h.stage}
+                      {h.note ? ` · ${h.note}` : ""}
+                    </li>
+                  );
+                })}
               </ul>
+            )}
+
+            {canFollowup && (
+              <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top">
+                <div className="small text-muted">
+                  {app.followupCount > 0
+                    ? `🔁 ${app.followupCount} follow-up${app.followupCount === 1 ? "" : "s"} sent${
+                        app.lastFollowupDate ? ` · last on ${app.lastFollowupDate}` : ""
+                      }`
+                    : "No follow-up logged yet in this stage."}
+                </div>
+                <button
+                  type="button"
+                  className={`btn btn-sm rounded-pill ${
+                    app.needsFollowup ? "btn-warning" : "btn-outline-secondary"
+                  }`}
+                  disabled={followupPending}
+                  onClick={handleLogFollowup}
+                >
+                  {followupPending ? "Logging…" : "🔁 Log follow-up"}
+                </button>
+              </div>
+            )}
+            {followupError && (
+              <div className="alert alert-danger py-2 px-3 mt-2 mb-0" role="alert">
+                {followupError}
+              </div>
             )}
           </div>
         </div>

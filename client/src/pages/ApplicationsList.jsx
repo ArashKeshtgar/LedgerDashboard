@@ -134,15 +134,20 @@ export default function ApplicationsList() {
         <h4 className="mb-0 page-title">
           Applications <span className="text-muted fw-normal">({filtered.length})</span>
         </h4>
-        <div className="search-input-wrap">
-          <span className="search-icon">🔍</span>
-          <input
-            className="form-control"
-            style={{ minWidth: 260 }}
-            placeholder="Search company, role, stage…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+        <div className="d-flex flex-wrap align-items-center gap-2">
+          <div className="search-input-wrap">
+            <span className="search-icon">🔍</span>
+            <input
+              className="form-control"
+              style={{ minWidth: 260 }}
+              placeholder="Search company, role, stage…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <Link to="/applications/new" className="btn btn-primary rounded-pill">
+            + Add application
+          </Link>
         </div>
       </div>
 

@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { fetchApplication, fetchPipelineStages, moveApplicationStage, logFollowup } from "../api.js";
+import {
+  fetchApplication,
+  fetchPipelineStages,
+  moveApplicationStage,
+  logFollowup,
+  updateApplication,
+} from "../api.js";
 import StageTimeline from "../components/StageTimeline.jsx";
 
 function Field({ label, value }) {
@@ -13,6 +19,121 @@ function Field({ label, value }) {
   );
 }
 
+// A free-text tracking field (notes, next action, …) the user edits directly
+// instead of going through ledger.csv by hand — click to edit in place.
+function EditableField({
+  label, value, editing, draft, onEdit, onChangeDraft, onSave, onCancel, saving, multiline, fullWidth,
+}) {
+  const wrapClass = fullWidth ? "mb-1" : "col-sm-6 mb-3";
+  if (!editing) {
+    return (
+      <div className={wrapClass}>
+        <div className="detail-field-label d-flex align-items-center justify-content-between">
+          <span>{label}</span>
+          <button type="button" className="btn btn-link btn-sm p-0" onClick={onEdit}>
+            ✏️ Edit
+          </button>
+        </div>
+        <div>{value || <span className="text-muted fst-italic">—</span>}</div>
+      </div>
+    );
+  }
+  return (
+    <div className={wrapClass}>
+      <div className="detail-field-label">{label}</div>
+      {multiline ? (
+        <textarea
+          className="form-control form-control-sm"
+          rows={2}
+          value={draft}
+          onChange={onChangeDraft}
+          autoFocus
+        />
+      ) : (
+        <input
+          className="form-control form-control-sm"
+          value={draft}
+          onChange={onChangeDraft}
+          autoFocus
+        />
+      )}
+      <div className="mt-1 d-flex gap-2">
+        <button type="button" className="btn btn-sm btn-success" disabled={saving} onClick={onSave}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Manual "record a stage update" form — for updates drag-and-drop on the
+// Pipeline board doesn't cover well: a real note, or a date other than today
+// (an interview that already happened, or one booked for next week).
+function StageUpdateForm({ options, onSubmit, pending }) {
+  const [stage, setStage] = useState("");
+  const [date, setDate] = useState("");
+  const [note, setNote] = useState("");
+
+  return (
+    <form
+      className="mt-3 pt-3 border-top d-flex flex-wrap gap-2 align-items-end"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!stage) return;
+        onSubmit(stage, note, date);
+        setStage("");
+        setDate("");
+        setNote("");
+      }}
+    >
+      <div>
+        <label className="form-label small mb-1">Record a stage update</label>
+        <select
+          className="form-select form-select-sm"
+          value={stage}
+          onChange={(e) => setStage(e.target.value)}
+          aria-label="Stage"
+        >
+          <option value="">— pick a stage —</option>
+          {options.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.icon} {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div style={{ width: 160 }}>
+        <label className="form-label small mb-1">Date</label>
+        <input
+          type="date"
+          className="form-control form-control-sm"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+      </div>
+      <div style={{ flex: "1 1 200px" }}>
+        <label className="form-label small mb-1">Note</label>
+        <input
+          className="form-control form-control-sm"
+          placeholder="optional"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </div>
+      <button
+        type="submit"
+        className="btn btn-sm btn-outline-primary rounded-pill"
+        disabled={pending || !stage}
+      >
+        {pending ? "Logging…" : "Log update"}
+      </button>
+    </form>
+  );
+}
+
 export default function ApplicationDetail() {
   const { id } = useParams();
   const [app, setApp] = useState(null);
@@ -22,6 +143,12 @@ export default function ApplicationDetail() {
   const [approveError, setApproveError] = useState(null);
   const [followupPending, setFollowupPending] = useState(false);
   const [followupError, setFollowupError] = useState(null);
+  const [editingField, setEditingField] = useState(null);
+  const [draftValue, setDraftValue] = useState("");
+  const [savingField, setSavingField] = useState(false);
+  const [editError, setEditError] = useState(null);
+  const [stageUpdatePending, setStageUpdatePending] = useState(false);
+  const [stageUpdateError, setStageUpdateError] = useState(null);
 
   useEffect(() => {
     setApp(null);
@@ -58,6 +185,43 @@ export default function ApplicationDetail() {
       setFollowupError(e.message);
     } finally {
       setFollowupPending(false);
+    }
+  }
+
+  function startEdit(field) {
+    setEditingField(field);
+    setDraftValue(app[field] || "");
+    setEditError(null);
+  }
+
+  function cancelEdit() {
+    setEditingField(null);
+  }
+
+  async function saveEdit() {
+    setSavingField(true);
+    setEditError(null);
+    try {
+      const updated = await updateApplication(app.id, { [editingField]: draftValue });
+      setApp((a) => ({ ...a, ...updated }));
+      setEditingField(null);
+    } catch (e) {
+      setEditError(e.message);
+    } finally {
+      setSavingField(false);
+    }
+  }
+
+  async function handleStageUpdate(stage, note, date) {
+    setStageUpdateError(null);
+    setStageUpdatePending(true);
+    try {
+      const updated = await moveApplicationStage(app.folder, stage, note, date);
+      setApp((a) => ({ ...a, ...updated }));
+    } catch (e) {
+      setStageUpdateError(e.message);
+    } finally {
+      setStageUpdatePending(false);
     }
   }
 
@@ -119,9 +283,20 @@ export default function ApplicationDetail() {
             <Field label="Date posted" value={app.date_posted} />
             <Field label="Variant" value={app.variant} />
             <Field label="Gap tags" value={app.gap_tags} />
-            <Field label="Last contact" value={app.last_contact} />
-            <Field label="Next action" value={app.next_action} />
-            <Field label="Outcome" value={app.outcome} />
+            {["last_contact", "next_action", "outcome"].map((field) => (
+              <EditableField
+                key={field}
+                label={{ last_contact: "Last contact", next_action: "Next action", outcome: "Outcome" }[field]}
+                value={app[field]}
+                editing={editingField === field}
+                draft={draftValue}
+                onEdit={() => startEdit(field)}
+                onChangeDraft={(e) => setDraftValue(e.target.value)}
+                onSave={saveEdit}
+                onCancel={cancelEdit}
+                saving={savingField}
+              />
+            ))}
           </div>
 
           {app.posting_url && (
@@ -132,12 +307,27 @@ export default function ApplicationDetail() {
             </div>
           )}
 
-          {app.notes && (
-            <div className="mt-3 pt-3 border-top">
-              <div className="detail-field-label mb-1">Notes</div>
-              <div className="fst-italic text-secondary">{app.notes}</div>
+          {editError && (
+            <div className="alert alert-danger py-2 px-3 mt-3 mb-0" role="alert">
+              {editError}
             </div>
           )}
+
+          <div className="mt-3 pt-3 border-top">
+            <EditableField
+              label="Notes"
+              value={app.notes}
+              editing={editingField === "notes"}
+              draft={draftValue}
+              onEdit={() => startEdit("notes")}
+              onChangeDraft={(e) => setDraftValue(e.target.value)}
+              onSave={saveEdit}
+              onCancel={cancelEdit}
+              saving={savingField}
+              multiline
+              fullWidth
+            />
+          </div>
         </div>
       </div>
 
@@ -190,6 +380,17 @@ export default function ApplicationDetail() {
             {followupError && (
               <div className="alert alert-danger py-2 px-3 mt-2 mb-0" role="alert">
                 {followupError}
+              </div>
+            )}
+
+            <StageUpdateForm
+              options={[...(stages.stages || []), ...(stages.terminal || [])]}
+              onSubmit={handleStageUpdate}
+              pending={stageUpdatePending}
+            />
+            {stageUpdateError && (
+              <div className="alert alert-danger py-2 px-3 mt-2 mb-0" role="alert">
+                {stageUpdateError}
               </div>
             )}
           </div>

@@ -51,15 +51,41 @@ export async function updateRecruiterStatus(id, field, value) {
   return res.json();
 }
 
-export async function moveApplicationStage(folder, stage, note = "") {
+export async function moveApplicationStage(folder, stage, note = "", date = "") {
   const res = await fetch(`${API_BASE}/api/pipeline-events`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folder, stage, note }),
+    body: JSON.stringify({ folder, stage, note, date: date || undefined }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Failed to move application (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function createApplication(fields) {
+  const res = await fetch(`${API_BASE}/api/applications`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Failed to create application (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function updateApplication(id, fields) {
+  const res = await fetch(`${API_BASE}/api/applications/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Failed to update application (${res.status})`);
   }
   return res.json();
 }

@@ -145,7 +145,10 @@ export default function ApplicationsList() {
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <Link to="/applications/new" className="btn btn-primary rounded-pill">
+          <Link to="/packages/new" className="btn btn-primary rounded-pill">
+            🤖 Build with AI
+          </Link>
+          <Link to="/applications/new" className="btn btn-outline-primary rounded-pill">
             + Add application
           </Link>
         </div>

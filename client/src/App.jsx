@@ -4,6 +4,7 @@ import DailyLine from "./components/DailyLine.jsx";
 import ApplicationsList from "./pages/ApplicationsList.jsx";
 import ApplicationDetail from "./pages/ApplicationDetail.jsx";
 import NewApplication from "./pages/NewApplication.jsx";
+import NewPackage from "./pages/NewPackage.jsx";
 import PipelineBoard from "./pages/PipelineBoard.jsx";
 import StatsPage from "./pages/StatsPage.jsx";
 import RecruitersBoard from "./pages/RecruitersBoard.jsx";
@@ -17,6 +18,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<ApplicationsList />} />
           <Route path="/applications/new" element={<NewApplication />} />
+          <Route path="/packages/new" element={<NewPackage />} />
           <Route path="/applications/:id" element={<ApplicationDetail />} />
           <Route path="/pipeline" element={<PipelineBoard />} />
           <Route path="/stats" element={<StatsPage />} />

@@ -90,6 +90,32 @@ export async function updateApplication(id, fields) {
   return res.json();
 }
 
+export async function analyzePosting({ company, role, postingText }) {
+  const res = await fetch(`${API_BASE}/api/packages/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ company, role, postingText }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Analysis failed (${res.status})`);
+  return body;
+}
+
+export async function buildPackage(fields) {
+  const res = await fetch(`${API_BASE}/api/packages/build`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(body.error || `Build failed (${res.status})`);
+    err.details = body.details;
+    throw err;
+  }
+  return body;
+}
+
 export async function logFollowup(folder, note = "") {
   const res = await fetch(`${API_BASE}/api/pipeline-events/followup`, {
     method: "POST",

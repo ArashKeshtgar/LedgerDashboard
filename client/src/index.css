@@ -12,14 +12,48 @@
   --space-4: 24px;
 }
 
+html, body, #root {
+  height: 100%;
+}
 body {
   background-color: var(--page-bg);
   font-feature-settings: "tnum" 1;
+  overflow: hidden;
 }
 
-/* ---- App chrome ---- */
+/* ---- App chrome ----
+   One bounded, app-like shell: the navbar is a fixed strip, and everything
+   else lives in a single panel below it that scrolls on its own — instead
+   of every route growing the whole browser page tall. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
 .app-navbar {
   box-shadow: var(--shadow-sm);
+  flex: 0 0 auto;
+}
+.app-scroll-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+.app-scroll-panel::-webkit-scrollbar {
+  width: 10px;
+}
+.app-scroll-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-scroll-panel::-webkit-scrollbar-thumb {
+  background: rgba(11, 11, 11, 0.16);
+  border-radius: 999px;
+  border: 2px solid var(--page-bg);
+}
+.app-scroll-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(11, 11, 11, 0.28);
 }
 .app-navbar .navbar-brand {
   font-weight: 600;

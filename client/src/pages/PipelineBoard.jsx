@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchApplications, fetchPipelineStages, moveApplicationStage, logFollowup } from "../api.js";
+import {
+  fetchApplications,
+  fetchPipelineStages,
+  moveApplicationStage,
+  logFollowup,
+  deleteApplication,
+} from "../api.js";
 
 function matchColor(score) {
   const n = Number(score);
@@ -78,13 +84,24 @@ function Card({ app, dragging, onDragStart, onDragEnd, canFollowup, onLogFollowu
   );
 }
 
-function PendingCard({ app, onApprove, approving }) {
+function PendingCard({ app, onApprove, approving, onDelete, deleting }) {
   return (
     <div className="pipeline-card pipeline-pending-card">
-      <Link to={`/applications/${app.id}`} className="pipeline-pending-link">
-        <div className="pipeline-card-company">{app.company}</div>
-        <div className="pipeline-card-role">{app.role}</div>
-      </Link>
+      <div className="d-flex justify-content-between align-items-start">
+        <Link to={`/applications/${app.id}`} className="pipeline-pending-link">
+          <div className="pipeline-card-company">{app.company}</div>
+          <div className="pipeline-card-role">{app.role}</div>
+        </Link>
+        <button
+          type="button"
+          className="btn btn-sm btn-link text-danger p-0"
+          title="Delete this draft — no build, no questions asked"
+          disabled={deleting || approving}
+          onClick={() => onDelete(app)}
+        >
+          🗑️
+        </button>
+      </div>
       <div className="pipeline-card-foot">
         <span
           className="pipeline-card-score"
@@ -95,7 +112,7 @@ function PendingCard({ app, onApprove, approving }) {
         <button
           type="button"
           className="btn btn-sm btn-success rounded-pill"
-          disabled={approving}
+          disabled={approving || deleting}
           onClick={() => onApprove(app.folder)}
         >
           {approving ? "Approving…" : "✅ Approve & Apply"}
@@ -135,6 +152,8 @@ export default function PipelineBoard() {
   // Approval state — a draft is a package that hasn't been sent yet, so it
   // stays out of the pipeline columns and out of stats until approved.
   const [approvingFolder, setApprovingFolder] = useState(null);
+  const [deletingFolder, setDeletingFolder] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
 
   useEffect(() => {
     Promise.all([fetchApplications(), fetchPipelineStages()])
@@ -198,6 +217,26 @@ export default function PipelineBoard() {
       setMoveError(e.message);
     } finally {
       setApprovingFolder(null);
+    }
+  }
+
+  // Discretion to bin a draft right from the board, before ever deciding
+  // whether it's worth building with AI.
+  async function handleDelete(app) {
+    if (!window.confirm(`Delete the draft for ${app.company} — ${app.role}? This can't be undone.`)) {
+      return;
+    }
+    setDeleteError(null);
+    setDeletingFolder(app.folder);
+    const prevRows = rows;
+    setRows((rs) => rs.filter((r) => r.folder !== app.folder));
+    try {
+      await deleteApplication(app.id);
+    } catch (e) {
+      setRows(prevRows);
+      setDeleteError(e.message);
+    } finally {
+      setDeletingFolder(null);
     }
   }
 
@@ -332,6 +371,11 @@ export default function PipelineBoard() {
           <h6 className="text-muted mb-2">
             📝 Pending approval <span className="pipeline-col-count">{pending.length}</span> — approve to send and add to the pipeline
           </h6>
+          {deleteError && (
+            <div className="alert alert-danger py-2 px-3 mb-2" role="alert">
+              {deleteError}
+            </div>
+          )}
           <div className="pipeline-pending-row">
             {pending.map((a) => (
               <PendingCard
@@ -339,6 +383,8 @@ export default function PipelineBoard() {
                 app={a}
                 onApprove={handleApprove}
                 approving={approvingFolder === a.folder}
+                onDelete={handleDelete}
+                deleting={deletingFolder === a.folder}
               />
             ))}
           </div>

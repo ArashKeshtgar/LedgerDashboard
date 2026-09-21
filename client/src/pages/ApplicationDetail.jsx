@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   fetchApplication,
   fetchPipelineStages,
   moveApplicationStage,
   logFollowup,
   updateApplication,
+  buildPackage,
+  deleteApplication,
 } from "../api.js";
 import StageTimeline from "../components/StageTimeline.jsx";
 
@@ -136,11 +138,18 @@ function StageUpdateForm({ options, onSubmit, pending }) {
 
 export default function ApplicationDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [app, setApp] = useState(null);
   const [stages, setStages] = useState({ stages: [], terminal: [] });
   const [error, setError] = useState(null);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  const [deciding, setDeciding] = useState(null); // null | "apply" | "apply_with_caveats" | "skip"
+  const [decisionError, setDecisionError] = useState(null);
+  const [decisionErrorDetails, setDecisionErrorDetails] = useState(null);
   const [followupPending, setFollowupPending] = useState(false);
   const [followupError, setFollowupError] = useState(null);
   const [editingField, setEditingField] = useState(null);
@@ -176,6 +185,58 @@ export default function ApplicationDetail() {
       setApproveError(e.message);
     } finally {
       setApproving(false);
+    }
+  }
+
+  // Discard a draft outright — your own call, no need to go through a build
+  // decision first. Same server action "Skip" uses below, exposed here as
+  // its own explicit step so it's available before you've decided anything.
+  async function handleDeleteDraft() {
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await deleteApplication(app.id);
+      navigate("/");
+    } catch (e) {
+      setDeleteError(e.message);
+      setDeleting(false);
+    }
+  }
+
+  // Mirrors NewPackage.jsx's analyze→decide gate, for a draft you're
+  // revisiting later instead of deciding on immediately after analyzing.
+  async function handleDecision(decision) {
+    if (decision === "skip") {
+      setDecisionError(null);
+      setDeciding("skip");
+      try {
+        await deleteApplication(app.id);
+        navigate("/");
+      } catch (e) {
+        setDecisionError(e.message);
+        setDeciding(null);
+      }
+      return;
+    }
+    setDecisionError(null);
+    setDecisionErrorDetails(null);
+    setDeciding(decision);
+    try {
+      const created = await buildPackage({
+        folder: app.folder,
+        company: app.company,
+        role: app.role,
+        postingText: app.postingText,
+        base_variant: app.variant,
+        match_score: app.match_score,
+        gaps: (app.gap_tags || "").split(",").filter(Boolean),
+        caveats: decision === "apply_with_caveats",
+      });
+      navigate(`/applications/${created.id}`);
+    } catch (e) {
+      setDecisionError(e.message);
+      setDecisionErrorDetails(e.details || null);
+      setDeciding(null);
     }
   }
 
@@ -265,7 +326,101 @@ export default function ApplicationDetail() {
         </div>
       )}
 
-      {app.stage === "draft" && (
+      {app.stage === "draft" && app.postingText && (
+        <div className="alert alert-warning mb-3">
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span>
+              📝 This package hasn't been sent yet — it won't show up on the Pipeline or count in
+              Stats until you decide. Nothing gets built until you say so.
+            </span>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-danger rounded-pill"
+              disabled={deleting || !!deciding}
+              onClick={() => setShowDeleteConfirm((v) => !v)}
+            >
+              🗑️ Delete draft
+            </button>
+          </div>
+
+          {showDeleteConfirm && (
+            <div className="d-flex flex-wrap gap-2 align-items-center mt-2 pt-2 border-top">
+              <span className="text-muted small">
+                Delete this draft and its folder right now, no build, no questions asked?
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm btn-danger rounded-pill"
+                disabled={deleting}
+                onClick={handleDeleteDraft}
+              >
+                {deleting ? "Deleting…" : "Confirm delete"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary rounded-pill"
+                disabled={deleting}
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {deleteError && (
+            <div className="alert alert-danger py-2 px-3 mt-2 mb-0" role="alert">
+              {deleteError}
+            </div>
+          )}
+
+          {decisionError && (
+            <div className="alert alert-danger py-2 px-3 mt-2 mb-0" role="alert">
+              {decisionError}
+              {decisionErrorDetails && (
+                <ul className="mb-0 mt-2 small">
+                  {decisionErrorDetails.map((d, i) => (
+                    <li key={i}>{d}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <div className="d-flex flex-wrap gap-2 mt-3 pt-3 border-top">
+            <button
+              type="button"
+              className="btn btn-sm btn-success rounded-pill"
+              disabled={!!deciding || deleting}
+              onClick={() => handleDecision("apply")}
+            >
+              {deciding === "apply" ? "Building…" : "✅ Apply — build the full package"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-warning rounded-pill"
+              disabled={!!deciding || deleting}
+              onClick={() => handleDecision("apply_with_caveats")}
+            >
+              {deciding === "apply_with_caveats" ? "Building…" : "⚠️ Apply with caveats"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary rounded-pill"
+              disabled={!!deciding || deleting}
+              onClick={() => handleDecision("skip")}
+            >
+              {deciding === "skip" ? "Removing…" : "⛔ Skip"}
+            </button>
+          </div>
+          {(deciding === "apply" || deciding === "apply_with_caveats") && (
+            <div className="text-muted small mt-2">
+              Writing the résumé, cover letter, match report and interview questions — this can
+              take a minute…
+            </div>
+          )}
+        </div>
+      )}
+
+      {app.stage === "draft" && !app.postingText && (
         <div className="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
           <span>📝 This package hasn't been sent yet — it won't show up on the Pipeline or count in Stats until approved.</span>
           <button

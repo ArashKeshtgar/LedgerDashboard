@@ -448,18 +448,21 @@ app.get("/api/applications/:id", (req, res) => {
     let files = [];
     let matchReport = null;
     let interviewQuestions = null;
+    let postingText = null;
     if (row.folder) {
       const folderPath = path.join(APPLICATIONS_DIR, row.folder);
       if (existsSync(folderPath)) {
         files = readdirSync(folderPath);
         const mrPath = path.join(folderPath, "Match_Report.md");
         const iqPath = path.join(folderPath, "Interview_Questions.md");
+        const postingPath = path.join(folderPath, "posting.txt");
         if (existsSync(mrPath)) matchReport = readFileSync(mrPath, "utf-8");
         if (existsSync(iqPath)) interviewQuestions = readFileSync(iqPath, "utf-8");
+        if (existsSync(postingPath)) postingText = readFileSync(postingPath, "utf-8");
       }
     }
 
-    res.json({ ...row, files, matchReport, interviewQuestions });
+    res.json({ ...row, files, matchReport, interviewQuestions, postingText });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

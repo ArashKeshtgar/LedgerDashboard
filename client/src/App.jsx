@@ -12,18 +12,22 @@ import RecruitersBoard from "./pages/RecruitersBoard.jsx";
 export default function App() {
   return (
     <HashRouter>
-      <Navbar />
-      <div className="container py-4">
-        <DailyLine />
-        <Routes>
-          <Route path="/" element={<ApplicationsList />} />
-          <Route path="/applications/new" element={<NewApplication />} />
-          <Route path="/packages/new" element={<NewPackage />} />
-          <Route path="/applications/:id" element={<ApplicationDetail />} />
-          <Route path="/pipeline" element={<PipelineBoard />} />
-          <Route path="/stats" element={<StatsPage />} />
-          <Route path="/recruiters" element={<RecruitersBoard />} />
-        </Routes>
+      <div className="app-shell">
+        <Navbar />
+        <main className="app-scroll-panel">
+          <div className="container py-4">
+            <DailyLine />
+            <Routes>
+              <Route path="/" element={<ApplicationsList />} />
+              <Route path="/applications/new" element={<NewApplication />} />
+              <Route path="/packages/new" element={<NewPackage />} />
+              <Route path="/applications/:id" element={<ApplicationDetail />} />
+              <Route path="/pipeline" element={<PipelineBoard />} />
+              <Route path="/stats" element={<StatsPage />} />
+              <Route path="/recruiters" element={<RecruitersBoard />} />
+            </Routes>
+          </div>
+        </main>
       </div>
     </HashRouter>
   );

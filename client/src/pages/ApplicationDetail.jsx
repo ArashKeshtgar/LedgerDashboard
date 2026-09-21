@@ -149,6 +149,10 @@ export default function ApplicationDetail() {
   const [editError, setEditError] = useState(null);
   const [stageUpdatePending, setStageUpdatePending] = useState(false);
   const [stageUpdateError, setStageUpdateError] = useState(null);
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectNote, setRejectNote] = useState("");
+  const [rejectPending, setRejectPending] = useState(false);
+  const [rejectError, setRejectError] = useState(null);
 
   useEffect(() => {
     setApp(null);
@@ -212,6 +216,21 @@ export default function ApplicationDetail() {
     }
   }
 
+  async function handleReject() {
+    setRejectError(null);
+    setRejectPending(true);
+    try {
+      const updated = await moveApplicationStage(app.folder, "rejected", rejectNote);
+      setApp((a) => ({ ...a, ...updated }));
+      setShowRejectForm(false);
+      setRejectNote("");
+    } catch (e) {
+      setRejectError(e.message);
+    } finally {
+      setRejectPending(false);
+    }
+  }
+
   async function handleStageUpdate(stage, note, date) {
     setStageUpdateError(null);
     setStageUpdatePending(true);
@@ -257,6 +276,64 @@ export default function ApplicationDetail() {
           >
             {approving ? "Approving…" : "✅ Approve & Apply"}
           </button>
+        </div>
+      )}
+
+      {!app.isTerminal && app.stage !== "draft" && (
+        <div className="alert alert-light border mb-3">
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span className="text-muted small">
+              Heard back from the employer? You can mark this rejected from wherever it
+              currently is in the pipeline — no need to go through the Pipeline board.
+            </span>
+            {!showRejectForm && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger rounded-pill"
+                onClick={() => setShowRejectForm(true)}
+              >
+                ❌ Mark as Rejected
+              </button>
+            )}
+          </div>
+          {showRejectForm && (
+            <div className="d-flex flex-wrap gap-2 align-items-end mt-2 pt-2 border-top">
+              <div style={{ flex: "1 1 240px" }}>
+                <label className="form-label small mb-1">Note (optional)</label>
+                <input
+                  className="form-control form-control-sm"
+                  placeholder="e.g. generic rejection email, no reason given"
+                  value={rejectNote}
+                  onChange={(e) => setRejectNote(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-danger rounded-pill"
+                disabled={rejectPending}
+                onClick={handleReject}
+              >
+                {rejectPending ? "Marking…" : "Confirm rejection"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary rounded-pill"
+                disabled={rejectPending}
+                onClick={() => {
+                  setShowRejectForm(false);
+                  setRejectNote("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {rejectError && (
+            <div className="alert alert-danger py-2 px-3 mt-2 mb-0" role="alert">
+              {rejectError}
+            </div>
+          )}
         </div>
       )}
 

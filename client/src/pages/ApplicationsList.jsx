@@ -128,6 +128,22 @@ export default function ApplicationsList() {
     }
   }
 
+  async function handleReject(folder) {
+    setApproveError(null);
+    setApprovingFolder(folder);
+    const prevRows = rows;
+    setRows((rs) => rs.map((r) => (r.folder === folder ? { ...r, stage: "rejected" } : r)));
+    try {
+      const updated = await moveApplicationStage(folder, "rejected");
+      setRows((rs) => rs.map((r) => (r.folder === folder ? { ...r, ...updated } : r)));
+    } catch (e) {
+      setRows(prevRows);
+      setApproveError(e.message);
+    } finally {
+      setApprovingFolder(null);
+    }
+  }
+
   return (
     <div>
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
@@ -265,6 +281,20 @@ export default function ApplicationsList() {
                         onClick={() => handleApprove(row.folder)}
                       >
                         {approvingFolder === row.folder ? "Approving…" : "✅ Approve & Apply"}
+                      </button>
+                    )}
+                    {row.stage !== "draft" && !row.isTerminal && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger rounded-pill"
+                        disabled={approvingFolder === row.folder}
+                        onClick={() => {
+                          if (window.confirm(`Mark ${row.company} as rejected?`)) {
+                            handleReject(row.folder);
+                          }
+                        }}
+                      >
+                        ❌ Reject
                       </button>
                     )}
                     <Link to={`/applications/${row.id}`} className="btn btn-sm btn-outline-primary rounded-pill">

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { analyzePosting, buildPackage } from "../api.js";
+import { analyzePosting, buildPackage, deleteApplication } from "../api.js";
 
 const SOURCES = ["linkedin", "indeed", "ziprecruiter", "company_site", "referral", "agency", "other"];
 
@@ -53,6 +53,12 @@ export default function NewPackage() {
 
   async function handleDecision(decision) {
     if (decision === "skip") {
+      setStep("building"); // reuse as a generic "busy" state to disable the buttons
+      try {
+        await deleteApplication(analysis.id);
+      } catch (err) {
+        // Even if cleanup fails, the user asked to leave — don't trap them here.
+      }
       navigate("/");
       return;
     }
@@ -61,15 +67,13 @@ export default function NewPackage() {
     setStep("building");
     try {
       const created = await buildPackage({
+        folder: analysis.folder,
         company: form.company,
         role: form.role,
         postingText: form.postingText,
         base_variant: analysis.base_variant,
         match_score: analysis.match_score,
         gaps: analysis.gaps,
-        location: form.location,
-        source: form.source,
-        posting_url: form.posting_url,
         caveats: decision === "apply_with_caveats",
       });
       navigate(`/applications/${created.id}`);
@@ -198,6 +202,11 @@ export default function NewPackage() {
                   {RECOMMENDATION_LABEL[analysis.recommendation].text}
                 </span>
                 <span className="text-muted small">base template: {analysis.base_variant}</span>
+              </div>
+
+              <div className="text-muted small mb-3">
+                📝 Already added as a draft — <strong>Skip</strong> removes it, <strong>Apply</strong>{" "}
+                fills it in with the real résumé and cover letter.
               </div>
 
               {analysis.duplicate && (

@@ -5,6 +5,7 @@ import { parse } from "csv-parse/sync";
 import { load as loadYaml } from "js-yaml";
 import {
   readFileSync, readdirSync, existsSync, appendFileSync, writeFileSync, mkdirSync, unlinkSync,
+  rmSync,
 } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -342,6 +343,17 @@ function createApplicationRow({
   return folder;
 }
 
+// Updates ledger fields on an already-existing row, found by folder rather
+// than array index — used by the build step to fill in what analyze
+// estimated (variant, score, gaps) once the heavier call has real numbers.
+function updateApplicationRowByFolder(folder, fields) {
+  const rows = loadLedger();
+  const idx = rows.findIndex((r) => r.folder === folder);
+  if (idx === -1) throw new Error(`Unknown folder: ${folder}`);
+  rows[idx] = { ...rows[idx], ...fields };
+  writeLedger(rows.map(({ id, ...r }) => r));
+}
+
 // POST /api/applications - add a new application (starts life in "draft",
 // same as one built by hand) so a new posting can be tracked without
 // touching ledger.csv directly. Body: { company, role, location?, branch?,
@@ -388,6 +400,30 @@ app.patch("/api/applications/:id", (req, res) => {
 
     const updated = withPipeline(loadLedger())[idx];
     res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/applications/:id - remove a row and its folder entirely.
+// Meant for undoing a draft the user never wanted (e.g. "Skip" on the
+// analyze→build gate) — not a general archive feature. pipeline.csv is left
+// alone (it's append-only everywhere else in this codebase); an orphaned
+// event for a deleted folder is harmless since nothing ever looks it up
+// once the folder is gone from ledger.csv.
+app.delete("/api/applications/:id", (req, res) => {
+  try {
+    const rows = loadLedger();
+    const idx = Number(req.params.id);
+    const row = rows[idx];
+    if (!row) return res.status(404).json({ error: "Not found" });
+
+    writeLedger(rows.filter((_, i) => i !== idx).map(({ id, ...r }) => r));
+
+    const folderPath = path.join(APPLICATIONS_DIR, row.folder);
+    if (existsSync(folderPath)) rmSync(folderPath, { recursive: true, force: true });
+
+    res.json({ deleted: true, folder: row.folder });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -505,10 +541,15 @@ const ANALYZE_TOOL = {
   },
 };
 
-// POST /api/packages/analyze - stage 1 (light). Body: { company, role, postingText }
+// POST /api/packages/analyze - stage 1 (light). This is the ONLY place a
+// draft row/folder gets created for the AI-package flow — build fills that
+// same folder in rather than making a new one, so analyzing a posting twice
+// (or analyzing one already added by hand) can't silently fork into two
+// folders for the same job. Body: { company, role, postingText, location?,
+// source?, posting_url? }
 app.post("/api/packages/analyze", async (req, res) => {
   try {
-    const { company, role, postingText } = req.body || {};
+    const { company, role, postingText, location, source, posting_url } = req.body || {};
     if (!company || !role || !postingText) {
       return res.status(400).json({ error: "company, role and postingText are required" });
     }
@@ -537,9 +578,21 @@ app.post("/api/packages/analyze", async (req, res) => {
 
     const toolUse = message.content.find((b) => b.type === "tool_use");
     if (!toolUse) throw new Error("Model did not return a structured analysis");
+    const analysis = toolUse.input;
+
+    const folder = createApplicationRow({
+      company, role, location, source, posting_url,
+      match_score: analysis.match_score,
+      variant: analysis.base_variant,
+      gap_tags: (analysis.gaps || []).join(","),
+    });
+    writeFileSync(path.join(APPLICATIONS_DIR, folder, "posting.txt"), postingText, "utf-8");
+    const createdRow = withPipeline(loadLedger()).find((r) => r.folder === folder);
 
     res.json({
-      ...toolUse.input,
+      ...analysis,
+      id: createdRow.id,
+      folder,
       duplicate: duplicate
         ? { display: duplicate.display, applications: duplicate.applications || [] }
         : null,
@@ -576,7 +629,14 @@ function buildPlanTool(facts) {
         },
         match_report_markdown: { type: "string" },
         interview_questions_markdown: { type: "string" },
-        cover_letter_markdown: { type: "string" },
+        cover_letter_markdown: {
+          type: "string",
+          description:
+            "BODY PARAGRAPHS ONLY, separated by blank lines (\\n\\n). Do not include " +
+            "'Dear Hiring Manager,' or any greeting, and do not include 'Sincerely,' or a " +
+            "sign-off — the cover letter template already has the header, greeting and " +
+            "sign-off, this field is only what goes between them.",
+        },
       },
       required: [
         "summary", "bullets", "match_report_markdown",
@@ -587,18 +647,24 @@ function buildPlanTool(facts) {
 }
 
 // POST /api/packages/build - stage 2 (heavy), only reached after the human
-// approval gate. Body: { company, role, postingText, base_variant,
-// match_score?, gaps?, location?, source?, posting_url?, caveats? }
+// approval gate. `folder` must already exist (created by /analyze) — this
+// endpoint fills it in, it never creates a new row. Body: { folder,
+// company, role, postingText, base_variant, match_score?, gaps?, caveats? }
 app.post("/api/packages/build", async (req, res) => {
   try {
-    const {
-      company, role, postingText, base_variant, match_score, gaps,
-      location, source, posting_url, caveats,
-    } = req.body || {};
-    if (!company || !role || !postingText || !base_variant) {
+    const { folder, company, role, postingText, base_variant, match_score, gaps, caveats } =
+      req.body || {};
+    if (!folder || !company || !role || !postingText || !base_variant) {
       return res
         .status(400)
-        .json({ error: "company, role, postingText and base_variant are required" });
+        .json({ error: "folder, company, role, postingText and base_variant are required" });
+    }
+
+    const folderPath = path.join(APPLICATIONS_DIR, folder);
+    if (!existsSync(folderPath)) {
+      return res.status(404).json({
+        error: `Unknown folder: ${folder} — call /api/packages/analyze first, it creates this`,
+      });
     }
 
     const facts = loadFactBank();
@@ -677,13 +743,7 @@ app.post("/api/packages/build", async (req, res) => {
       });
     }
 
-    // Guardian passed — now it's safe to create the ledger row + folder.
-    const folder = createApplicationRow({
-      company, role, location, source, posting_url,
-      variant: base_variant, match_score, gap_tags: (gaps || []).join(","),
-    });
-    const folderPath = path.join(APPLICATIONS_DIR, folder);
-
+    // Guardian passed — render into the folder /analyze already created.
     const build = spawnSync(python, [path.join(ENGINE_DIR, "build.py"), planPath, folderPath], {
       encoding: "utf-8",
     });
@@ -691,13 +751,12 @@ app.post("/api/packages/build", async (req, res) => {
 
     if (build.status !== 0) {
       return res.status(500).json({
-        error: "build.py failed after the ledger row/folder were already created",
+        error: "build.py failed",
         folder,
         details: (build.stdout || build.stderr || "").split("\n").filter(Boolean),
       });
     }
 
-    writeFileSync(path.join(folderPath, "posting.txt"), postingText, "utf-8");
     writeFileSync(path.join(folderPath, "Match_Report.md"), generated.match_report_markdown, "utf-8");
     writeFileSync(
       path.join(folderPath, "Interview_Questions.md"),
@@ -705,6 +764,14 @@ app.post("/api/packages/build", async (req, res) => {
       "utf-8"
     );
     writeFileSync(path.join(folderPath, "CoverLetter.md"), generated.cover_letter_markdown, "utf-8");
+
+    // Refresh the row with the heavier call's numbers (analyze's were an
+    // early estimate) — folder/status/etc. are untouched.
+    updateApplicationRowByFolder(folder, {
+      variant: base_variant,
+      match_score: match_score ?? "",
+      gap_tags: (gaps || []).join(","),
+    });
 
     const updated = withPipeline(loadLedger()).find((r) => r.folder === folder);
     res.status(201).json(updated);

@@ -90,15 +90,24 @@ export async function updateApplication(id, fields) {
   return res.json();
 }
 
-export async function analyzePosting({ company, role, postingText }) {
+export async function analyzePosting({ company, role, postingText, location, source, posting_url }) {
   const res = await fetch(`${API_BASE}/api/packages/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ company, role, postingText }),
+    body: JSON.stringify({ company, role, postingText, location, source, posting_url }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Analysis failed (${res.status})`);
   return body;
+}
+
+export async function deleteApplication(id) {
+  const res = await fetch(`${API_BASE}/api/applications/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Failed to delete application (${res.status})`);
+  }
+  return res.json();
 }
 
 export async function buildPackage(fields) {

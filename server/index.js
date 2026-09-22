@@ -380,7 +380,7 @@ app.post("/api/applications", (req, res) => {
 // PATCH /api/applications/:id - edit the free-text tracking fields (not
 // pipeline stage — that's POST /api/pipeline-events — and not the posting
 // facts, which come from how the package was built).
-const EDITABLE_LEDGER_FIELDS = new Set(["notes", "next_action", "last_contact", "outcome"]);
+const EDITABLE_LEDGER_FIELDS = new Set(["notes", "next_action", "last_contact", "outcome", "gap_tags"]);
 app.patch("/api/applications/:id", (req, res) => {
   try {
     const rows = loadLedger();
@@ -505,6 +505,15 @@ function anthropicClient() {
   return new Anthropic({ apiKey: key });
 }
 
+// The gap_tags.yml dictionary — short kebab-case slug -> description. This
+// is what ledger.csv's own gap_tags column is supposed to hold (comma-
+// joined slugs), NOT free-text sentences — sentences have commas in them
+// and shred into garbage fragments the moment Stats splits on ",".
+function loadGapTagsDict() {
+  if (!existsSync(GAP_TAGS_PATH)) return {};
+  return loadYaml(readFileSync(GAP_TAGS_PATH, "utf-8")) || {};
+}
+
 // Duplicate-company check (Resume_Engine_Plan.md step 2) — three-layer
 // match (exact key, then aliases, then display name) run BEFORE any API
 // call, so a repeat posting doesn't cost tokens to discover.
@@ -538,9 +547,22 @@ const ANALYZE_TOOL = {
         type: "string",
         description: "2-4 sentences: why this score, the strongest fit points, the biggest gaps.",
       },
-      gaps: { type: "array", items: { type: "string" } },
+      gaps: {
+        type: "array",
+        items: { type: "string" },
+        description: "Human-readable gap explanations, one full sentence each, for display.",
+      },
+      gap_tags: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "The SAME gaps as short kebab-case slugs (e.g. 'etl-ssis', 'power-bi'), for storage " +
+          "and stats aggregation — never a sentence, never containing a comma. Reuse an existing " +
+          "slug from the dictionary below if this gap matches one; only coin a new short slug " +
+          "when it's genuinely not covered yet.",
+      },
     },
-    required: ["base_variant", "match_score", "recommendation", "reasoning", "gaps"],
+    required: ["base_variant", "match_score", "recommendation", "reasoning", "gaps", "gap_tags"],
   },
 };
 
@@ -563,6 +585,10 @@ app.post("/api/packages/analyze", async (req, res) => {
       .filter((f) => !(f.tags || []).includes("excluded"))
       .map((f) => `- ${f.id} [${f.strength}]: ${f.claim.trim().replace(/\s+/g, " ")}`)
       .join("\n");
+    const gapTagsDict = loadGapTagsDict();
+    const gapTagsSummary = Object.entries(gapTagsDict)
+      .map(([slug, desc]) => `- ${slug}: ${desc}`)
+      .join("\n");
 
     const client = anthropicClient();
     const message = await client.messages.create({
@@ -571,7 +597,9 @@ app.post("/api/packages/analyze", async (req, res) => {
       system:
         "You are scoring how well a job posting matches a candidate, using ONLY the facts " +
         "listed below — never invent experience, numbers or skills not in this list. " +
-        "Call submit_analysis with your result.\n\nCANDIDATE FACT BANK:\n" + factSummary,
+        "Call submit_analysis with your result.\n\nCANDIDATE FACT BANK:\n" + factSummary +
+        "\n\nEXISTING GAP-TAG DICTIONARY (reuse these slugs when a gap matches one; only " +
+        "coin a new short kebab-case slug when it doesn't):\n" + gapTagsSummary,
       messages: [
         { role: "user", content: `Job posting for ${role} at ${company}:\n\n${postingText}` },
       ],
@@ -587,7 +615,7 @@ app.post("/api/packages/analyze", async (req, res) => {
       company, role, location, source, posting_url,
       match_score: analysis.match_score,
       variant: analysis.base_variant,
-      gap_tags: (analysis.gaps || []).join(","),
+      gap_tags: (analysis.gap_tags || []).join(","),
     });
     writeFileSync(path.join(APPLICATIONS_DIR, folder, "posting.txt"), postingText, "utf-8");
     const createdRow = withPipeline(loadLedger()).find((r) => r.folder === folder);
@@ -655,7 +683,7 @@ function buildPlanTool(facts) {
 // company, role, postingText, base_variant, match_score?, gaps?, caveats? }
 app.post("/api/packages/build", async (req, res) => {
   try {
-    const { folder, company, role, postingText, base_variant, match_score, gaps, caveats } =
+    const { folder, company, role, postingText, base_variant, match_score, gap_tags, caveats } =
       req.body || {};
     if (!folder || !company || !role || !postingText || !base_variant) {
       return res
@@ -773,7 +801,7 @@ app.post("/api/packages/build", async (req, res) => {
     updateApplicationRowByFolder(folder, {
       variant: base_variant,
       match_score: match_score ?? "",
-      gap_tags: (gaps || []).join(","),
+      gap_tags: (gap_tags || []).join(","),
     });
 
     const updated = withPipeline(loadLedger()).find((r) => r.folder === folder);

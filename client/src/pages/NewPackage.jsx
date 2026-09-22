@@ -73,7 +73,7 @@ export default function NewPackage() {
         postingText: form.postingText,
         base_variant: analysis.base_variant,
         match_score: analysis.match_score,
-        gaps: analysis.gaps,
+        gap_tags: analysis.gap_tags,
         caveats: decision === "apply_with_caveats",
       });
       navigate(`/applications/${created.id}`);

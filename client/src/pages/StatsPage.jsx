@@ -68,26 +68,37 @@ export default function StatsPage() {
     .sort((a, b) => b.value - a.value);
 
   // --- Gap analysis: split gap_tags per row, count + average match_score per tag ---
+  // Unlike the tiles above, this pulls from EVERY scored posting, including
+  // ones still in draft — the gap signal comes from the posting's own
+  // requirements vs. the fact bank at analyze time, not from whether the
+  // application actually got sent. A draft that never got approved still
+  // tells you a skill is in demand. Rejections are weighted even more:
+  // they're the clearest real-world confirmation a gap actually cost you
+  // something, not just a posting that happened to ask for it.
   const gapStats = {};
-  counted.forEach((r) => {
+  rows.forEach((r) => {
     const tags = (r.gap_tags || "")
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
+    const isRejected = r.stage === "rejected";
     tags.forEach((tag) => {
-      if (!gapStats[tag]) gapStats[tag] = { count: 0, scoreSum: 0 };
+      if (!gapStats[tag]) gapStats[tag] = { count: 0, scoreSum: 0, rejectedCount: 0 };
       gapStats[tag].count += 1;
       gapStats[tag].scoreSum += Number(r.match_score || 0);
+      if (isRejected) gapStats[tag].rejectedCount += 1;
     });
   });
+  const gapPoolTotal = rows.length;
   const gapRows = Object.entries(gapStats)
     .map(([tag, s]) => ({
       tag,
       label: gapDict[tag] || tag,
       count: s.count,
       avgScore: Math.round(s.scoreSum / s.count),
+      rejectedCount: s.rejectedCount,
     }))
-    .sort((a, b) => b.count - a.count || a.avgScore - b.avgScore);
+    .sort((a, b) => b.rejectedCount - a.rejectedCount || b.count - a.count || a.avgScore - b.avgScore);
 
   const gapChartItems = gapRows.map((g) => ({
     label: g.tag,
@@ -101,7 +112,8 @@ export default function StatsPage() {
       {pendingCount > 0 && (
         <div className="text-muted small mb-4">
           📝 {pendingCount} more waiting for approval on the{" "}
-          <Link to="/pipeline">Pipeline</Link> — not counted here yet.
+          <Link to="/pipeline">Pipeline</Link> — not counted in the totals above yet, but
+          already included in the gap analysis below.
         </div>
       )}
 
@@ -167,6 +179,11 @@ export default function StatsPage() {
           Gap analysis — which recurring gap to close
         </div>
         <div className="card-body">
+          <div className="text-muted small mb-3">
+            Includes every scored posting — drafts too, not just sent applications — since
+            the gap shows up the moment a posting is analyzed, whether or not it went
+            further.
+          </div>
           {gapRows.length === 0 ? (
             <div className="text-muted small">No gap tags recorded yet.</div>
           ) : (
@@ -181,6 +198,7 @@ export default function StatsPage() {
                       <tr>
                         <th>Gap</th>
                         <th className="text-end">Postings</th>
+                        <th className="text-end">Rejected</th>
                         <th className="text-end">Avg match w/o it</th>
                       </tr>
                     </thead>
@@ -192,7 +210,14 @@ export default function StatsPage() {
                             <span className="text-muted small">{g.label}</span>
                           </td>
                           <td className="text-end">
-                            {g.count} / {total}
+                            {g.count} / {gapPoolTotal}
+                          </td>
+                          <td className="text-end">
+                            {g.rejectedCount > 0 ? (
+                              <span className="badge bg-danger">{g.rejectedCount}</span>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
                           </td>
                           <td className="text-end">{g.avgScore}%</td>
                         </tr>
@@ -201,9 +226,11 @@ export default function StatsPage() {
                   </table>
                 </div>
                 <div className="text-muted small mt-2">
-                  Top row = the gap worth closing first if you're going to skill up on
-                  just one thing. A gap that appears only once is usually cheaper to
-                  handle in the cover letter than to train for.
+                  Sorted by how often a gap shows up in an actual rejection first, then by
+                  how often it appears overall — a gap tied to real rejections is worth
+                  closing before one that's merely common. A gap that appears only once
+                  with no rejections attached is usually cheaper to handle in the cover
+                  letter than to train for.
                 </div>
               </div>
             </div>

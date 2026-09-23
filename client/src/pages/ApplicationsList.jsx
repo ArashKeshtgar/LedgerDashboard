@@ -79,6 +79,8 @@ export default function ApplicationsList() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [matchFilter, setMatchFilter] = useState("all");
   const [followupOnly, setFollowupOnly] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [approvingFolder, setApprovingFolder] = useState(null);
   const [approveError, setApproveError] = useState(null);
   const [scrollPos, setScrollPos] = useState({ index: 1, showTop: false });
@@ -112,7 +114,7 @@ export default function ApplicationsList() {
   useEffect(() => {
     if (scrollAreaRef.current) scrollAreaRef.current.scrollTop = 0;
     setScrollPos({ index: 1, showTop: false });
-  }, [query, stageFilter, sourceFilter, matchFilter, followupOnly]);
+  }, [query, stageFilter, sourceFilter, matchFilter, followupOnly, dateFrom, dateTo]);
 
   const sources = useMemo(
     () => [...new Set(rows.map((r) => r.source).filter(Boolean))].sort(),
@@ -141,6 +143,8 @@ export default function ApplicationsList() {
     if (stageFilter !== "all" && r.stage !== stageFilter) return false;
     if (sourceFilter !== "all" && r.source !== sourceFilter) return false;
     if (followupOnly && !r.needsFollowup) return false;
+    if (dateFrom && r.date && r.date < dateFrom) return false;
+    if (dateTo && r.date && r.date > dateTo) return false;
     if (!matchTest(r.match_score)) return false;
     return (
       !q ||
@@ -156,10 +160,18 @@ export default function ApplicationsList() {
     setSourceFilter("all");
     setMatchFilter("all");
     setFollowupOnly(false);
+    setDateFrom("");
+    setDateTo("");
   };
 
   const filtersActive =
-    query || stageFilter !== "all" || sourceFilter !== "all" || matchFilter !== "all" || followupOnly;
+    query ||
+    stageFilter !== "all" ||
+    sourceFilter !== "all" ||
+    matchFilter !== "all" ||
+    followupOnly ||
+    dateFrom ||
+    dateTo;
 
   async function handleApprove(folder) {
     setApproveError(null);
@@ -272,6 +284,25 @@ export default function ApplicationsList() {
             </option>
           ))}
         </select>
+
+        <div className="date-filter-group">
+          <span className="date-filter-icon" aria-hidden="true">📅</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            aria-label="From date"
+            title="From date"
+          />
+          <span className="date-filter-sep">–</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            aria-label="To date"
+            title="To date"
+          />
+        </div>
 
         <div className="pipeline-toolbar-radios" role="radiogroup" aria-label="Filter by match score">
           {MATCH_FILTERS.map((m) => (

@@ -409,6 +409,34 @@ body {
   background: #2a78d6;
   color: #fff;
 }
+.date-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.date-filter-icon {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+.date-filter-group input[type="date"] {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 0.83rem;
+  color: #232321;
+  width: 118px;
+}
+.date-filter-group input[type="date"]:focus {
+  outline: none;
+}
+.date-filter-sep {
+  color: #a9a8a3;
+  font-size: 0.8rem;
+}
 .pipeline-toolbar-check {
   display: flex;
   align-items: center;

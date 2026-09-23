@@ -358,14 +358,20 @@ export default function ApplicationsList() {
                   style={{ animationDelay: `${Math.min(i * 20, 260)}ms` }}
                 >
                   <td className="row-index">{i + 1}</td>
-                  <td className="text-muted cell-truncate">{row.date}</td>
-                  <td className="cell-stack">
-                    <span className="cell-primary cell-truncate" title={row.company}>{row.company}</span>
-                    <span className="cell-secondary cell-truncate" title={row.role}>{row.role}</span>
+                  <td className="text-muted">
+                    <span className="cell-truncate">{row.date}</span>
                   </td>
-                  <td className="cell-stack">
-                    <span className="cell-truncate" title={row.location}>{row.location || "—"}</span>
-                    <span className="cell-secondary text-capitalize cell-truncate">{row.source || "—"}</span>
+                  <td>
+                    <div className="cell-stack">
+                      <span className="cell-primary cell-truncate" title={row.company}>{row.company}</span>
+                      <span className="cell-secondary cell-truncate" title={row.role}>{row.role}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="cell-stack">
+                      <span className="cell-truncate" title={row.location}>{row.location || "—"}</span>
+                      <span className="cell-secondary text-capitalize cell-truncate">{row.source || "—"}</span>
+                    </div>
                   </td>
                   <td>
                     <span className={`chip ${matchChipClass(row.match_score)}`}>{row.match_score}%</span>

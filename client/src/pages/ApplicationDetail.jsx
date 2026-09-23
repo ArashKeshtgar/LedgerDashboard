@@ -222,7 +222,7 @@ export default function ApplicationDetail() {
     setDecisionErrorDetails(null);
     setDeciding(decision);
     try {
-      const created = await buildPackage({
+      await buildPackage({
         folder: app.folder,
         company: app.company,
         role: app.role,
@@ -232,10 +232,17 @@ export default function ApplicationDetail() {
         gaps: (app.gap_tags || "").split(",").filter(Boolean),
         caveats: decision === "apply_with_caveats",
       });
-      navigate(`/applications/${created.id}`);
+      // Building fills in the SAME draft row/folder, it never creates a new
+      // one — navigating to `/applications/${id}` here would be a no-op (same
+      // path this page is already on), which used to leave the UI stuck on
+      // "Building…" forever even though the package was written to disk.
+      // Re-fetch in place instead so the new files/fields actually show up.
+      const refreshed = await fetchApplication(id);
+      setApp(refreshed);
     } catch (e) {
       setDecisionError(e.message);
       setDecisionErrorDetails(e.details || null);
+    } finally {
       setDeciding(null);
     }
   }

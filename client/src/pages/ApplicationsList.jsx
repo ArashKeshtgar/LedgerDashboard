@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchApplications, fetchPipelineStages, moveApplicationStage } from "../api.js";
 
@@ -53,6 +53,13 @@ function SpinnerIcon() {
     </svg>
   );
 }
+function UpArrowIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 10l4-4 4 4" />
+    </svg>
+  );
+}
 
 const MATCH_FILTERS = [
   { key: "all", label: "All" },
@@ -74,6 +81,9 @@ export default function ApplicationsList() {
   const [followupOnly, setFollowupOnly] = useState(false);
   const [approvingFolder, setApprovingFolder] = useState(null);
   const [approveError, setApproveError] = useState(null);
+  const [scrollPos, setScrollPos] = useState({ index: 1, showTop: false });
+  const scrollAreaRef = useRef(null);
+  const firstRowRef = useRef(null);
 
   useEffect(() => {
     fetchApplications()
@@ -95,6 +105,14 @@ export default function ApplicationsList() {
       })
       .catch(() => {});
   }, []);
+
+  // Filtering to a different set makes the old scroll position/row-count
+  // meaningless (row 12 of "all" isn't row 12 of "≥55% match") — snap back
+  // to the top and reset the position readout whenever a filter changes.
+  useEffect(() => {
+    if (scrollAreaRef.current) scrollAreaRef.current.scrollTop = 0;
+    setScrollPos({ index: 1, showTop: false });
+  }, [query, stageFilter, sourceFilter, matchFilter, followupOnly]);
 
   const sources = useMemo(
     () => [...new Set(rows.map((r) => r.source).filter(Boolean))].sort(),
@@ -173,6 +191,23 @@ export default function ApplicationsList() {
     } finally {
       setApprovingFolder(null);
     }
+  }
+
+  // Tracks roughly which row is at the top of the scrolled table (by row
+  // height, since every row is now the same height) so a long list can show
+  // "you're at #N of M" instead of losing all sense of position once the
+  // header scrolls out of view.
+  function handleTableScroll() {
+    const el = scrollAreaRef.current;
+    const rowEl = firstRowRef.current;
+    if (!el || !rowEl || filtered.length === 0) return;
+    const rowHeight = rowEl.getBoundingClientRect().height || 1;
+    const index = Math.min(filtered.length, Math.max(1, Math.round(el.scrollTop / rowHeight) + 1));
+    setScrollPos({ index, showTop: el.scrollTop > 240 });
+  }
+
+  function scrollToTop() {
+    scrollAreaRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
@@ -271,10 +306,11 @@ export default function ApplicationsList() {
       </div>
 
       <div className="table-card">
-        <div className="table-responsive">
+        <div className="table-scroll-area" ref={scrollAreaRef} onScroll={handleTableScroll}>
           <table className="table table-hover align-middle">
             <thead>
               <tr>
+                <th style={{ width: 40 }} className="text-end">#</th>
                 <th style={{ width: 92 }}>Date</th>
                 <th>Company</th>
                 <th>Location</th>
@@ -285,7 +321,12 @@ export default function ApplicationsList() {
             </thead>
             <tbody>
               {filtered.map((row, i) => (
-                <tr key={row.id} style={{ animationDelay: `${Math.min(i * 20, 260)}ms` }}>
+                <tr
+                  key={row.id}
+                  ref={i === 0 ? firstRowRef : undefined}
+                  style={{ animationDelay: `${Math.min(i * 20, 260)}ms` }}
+                >
+                  <td className="row-index">{i + 1}</td>
                   <td className="text-muted cell-truncate">{row.date}</td>
                   <td className="cell-stack">
                     <span className="cell-primary cell-truncate" title={row.company}>{row.company}</span>
@@ -347,7 +388,7 @@ export default function ApplicationsList() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center text-muted py-4">
+                  <td colSpan={7} className="text-center text-muted py-4">
                     No applications match your search.
                   </td>
                 </tr>
@@ -355,6 +396,25 @@ export default function ApplicationsList() {
             </tbody>
           </table>
         </div>
+
+        {filtered.length > 8 && (
+          <div className="table-scroll-hud">
+            <span className="table-scroll-hud-pos">
+              {Math.min(scrollPos.index, filtered.length)} / {filtered.length}
+            </span>
+            {scrollPos.showTop && (
+              <button
+                type="button"
+                className="icon-btn table-scroll-top"
+                title="Back to top"
+                aria-label="Back to top"
+                onClick={scrollToTop}
+              >
+                <UpArrowIcon />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

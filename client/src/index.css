@@ -126,6 +126,7 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  position: relative;
 }
 .table-card .table {
   margin-bottom: 0;
@@ -138,6 +139,50 @@ body {
   border-bottom: 1px solid var(--border-soft);
   padding: 12px 14px;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+/* A bounded, self-scrolling body (same pattern as the Pipeline board's
+   kanban columns) — needed so the sticky header above actually has
+   something to stick against, and so a long list orients you with a
+   position readout instead of scrolling the whole page out from under
+   the filters/search bar. */
+.table-scroll-area {
+  max-height: calc(100vh - 360px);
+  min-height: 220px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+.row-index {
+  text-align: end;
+  font-size: 0.72rem;
+  color: #a9a8a3;
+  font-variant-numeric: tabular-nums;
+}
+.table-scroll-hud {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 3;
+}
+.table-scroll-hud-pos {
+  background: rgba(11, 11, 11, 0.78);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow-md);
+}
+.table-scroll-top {
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
 }
 .table-card tbody td {
   padding: 12px 14px;

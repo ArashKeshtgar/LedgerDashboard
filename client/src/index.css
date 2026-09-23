@@ -142,7 +142,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--surface);
+  background: #f8f8f9;
+  box-shadow: 0 2px 4px -3px rgba(16, 24, 40, 0.10);
 }
 /* A bounded, self-scrolling body (same pattern as the Pipeline board's
    kanban columns) — needed so the sticky header above actually has

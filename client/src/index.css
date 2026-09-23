@@ -10,6 +10,8 @@
   --space-2: 8px;
   --space-3: 16px;
   --space-4: 24px;
+  --table-border: rgba(11, 11, 11, 0.13);
+  --table-zebra: rgba(11, 11, 12, 0.05);
 }
 
 html, body, #root {
@@ -136,13 +138,17 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #6b6a66;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--table-border);
+  border-right: 1px solid var(--table-border);
   padding: 12px 14px;
   white-space: nowrap;
   position: sticky;
   top: 0;
   z-index: 2;
   background: var(--surface);
+}
+.table-card thead th:last-child {
+  border-right: none;
 }
 /* A bounded, self-scrolling body (same pattern as the Pipeline board's
    kanban columns) — needed so the sticky header above actually has
@@ -187,7 +193,11 @@ body {
 .table-card tbody td {
   padding: 12px 14px;
   vertical-align: middle;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--table-border);
+  border-right: 1px solid var(--table-border);
+}
+.table-card tbody td:last-child {
+  border-right: none;
 }
 .table-card tbody tr:last-child td {
   border-bottom: none;
@@ -196,8 +206,13 @@ body {
   transition: background-color 0.12s ease;
   animation: row-rise 0.28s ease both;
 }
+/* Zebra striping — an even/odd tint, distinct enough to tell rows apart at
+   a glance in a long list, subtle enough not to fight the chips/text. */
+.table-card tbody tr:nth-child(even) {
+  background-color: var(--table-zebra);
+}
 .table-card tbody tr:hover {
-  background-color: #f7f8fa;
+  background-color: #f0f2f5;
 }
 @keyframes row-rise {
   from { opacity: 0; transform: translateY(4px); }

@@ -1,3 +1,9 @@
+// A logged stage update can carry a time too ("...T14:30") — show that as a
+// space instead of a raw "T".
+function formatEventDate(value) {
+  return value && value.includes("T") ? value.replace("T", " ") : value;
+}
+
 // Horizontal stepper showing where one application stands.
 // Past stages are filled, the current one is highlighted, future ones are muted.
 export default function StageTimeline({ stages, terminal, current, history }) {
@@ -28,7 +34,7 @@ export default function StageTimeline({ stages, terminal, current, history }) {
             >
               <div className="stage-dot">{done ? "✓" : s.icon}</div>
               <div className="stage-label">{s.label}</div>
-              <div className="stage-date">{date || ""}</div>
+              <div className="stage-date">{formatEventDate(date) || ""}</div>
             </div>
           );
         })}
@@ -38,7 +44,7 @@ export default function StageTimeline({ stages, terminal, current, history }) {
         <div className="alert alert-secondary mt-3 mb-0 py-2">
           {terminalHit.icon} <strong>{terminalHit.label}</strong>
           {dateFor(terminalHit.key) && (
-            <span className="text-muted ms-2">{dateFor(terminalHit.key)}</span>
+            <span className="text-muted ms-2">{formatEventDate(dateFor(terminalHit.key))}</span>
           )}
         </div>
       )}

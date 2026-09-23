@@ -128,7 +128,9 @@ function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// Plain date (YYYY-MM-DD) or, since the "Record a stage update" form also
+// takes an optional time, a date+time ("YYYY-MM-DDTHH:mm", seconds optional).
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/;
 
 // Appends one event line to pipeline.csv. The file is append-only — the last
 // line for a folder is its current stage — so moving a card is just a new line.
@@ -266,7 +268,7 @@ app.post("/api/pipeline-events", (req, res) => {
       return res.status(400).json({ error: "folder and stage are required" });
     }
     if (date && !ISO_DATE_RE.test(date)) {
-      return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+      return res.status(400).json({ error: "date must be YYYY-MM-DD, optionally with THH:mm" });
     }
 
     const { stages, terminal } = loadStages();

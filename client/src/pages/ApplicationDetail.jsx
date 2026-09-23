@@ -11,6 +11,13 @@ import {
 } from "../api.js";
 import StageTimeline from "../components/StageTimeline.jsx";
 
+// Pipeline event dates are usually a plain YYYY-MM-DD, but the "Record a
+// stage update" form can attach a time too ("...T14:30") — show that as a
+// space instead of a raw "T" wherever an event date is displayed.
+function formatEventDate(value) {
+  return value && value.includes("T") ? value.replace("T", " ") : value;
+}
+
 function Field({ label, value }) {
   if (!value) return null;
   return (
@@ -77,6 +84,7 @@ function EditableField({
 function StageUpdateForm({ options, onSubmit, pending }) {
   const [stage, setStage] = useState("");
   const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
   const [note, setNote] = useState("");
 
   return (
@@ -85,9 +93,13 @@ function StageUpdateForm({ options, onSubmit, pending }) {
       onSubmit={(e) => {
         e.preventDefault();
         if (!stage) return;
-        onSubmit(stage, note, date);
+        // Time only means anything paired with a date — if no date was
+        // picked (defaults to today server-side), drop a leftover time too.
+        const when = date && time ? `${date}T${time}` : date;
+        onSubmit(stage, note, when);
         setStage("");
         setDate("");
+        setTime("");
         setNote("");
       }}
     >
@@ -107,13 +119,28 @@ function StageUpdateForm({ options, onSubmit, pending }) {
           ))}
         </select>
       </div>
-      <div style={{ width: 160 }}>
+      <div style={{ width: 150 }}>
         <label className="form-label small mb-1">Date</label>
         <input
           type="date"
           className="form-control form-control-sm"
           value={date}
-          onChange={(e) => setDate(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setDate(v);
+            if (!v) setTime("");
+          }}
+        />
+      </div>
+      <div style={{ width: 120 }}>
+        <label className="form-label small mb-1">Time</label>
+        <input
+          type="time"
+          className="form-control form-control-sm"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          disabled={!date}
+          title={date ? "" : "Pick a date first"}
         />
       </div>
       <div style={{ flex: "1 1 200px" }}>
@@ -586,7 +613,7 @@ export default function ApplicationDetail() {
                   const meta = stageLabels.get(h.stage);
                   return (
                     <li key={i}>
-                      <span className="fw-semibold">{h.date}</span> —{" "}
+                      <span className="fw-semibold">{formatEventDate(h.date)}</span> —{" "}
                       {meta ? `${meta.icon} ${meta.label}` : h.stage}
                       {h.note ? ` · ${h.note}` : ""}
                     </li>

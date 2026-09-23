@@ -2,25 +2,56 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchApplications, fetchPipelineStages, moveApplicationStage } from "../api.js";
 
-function matchBadgeClass(score) {
+function matchChipClass(score) {
   const n = Number(score);
-  if (n >= 55) return "bg-success";
-  if (n >= 40) return "bg-warning text-dark";
-  return "bg-danger";
+  if (n >= 55) return "chip-success";
+  if (n >= 40) return "chip-warning";
+  return "chip-danger";
 }
 
-function stageBadgeClass(stage) {
+function stageChipClass(stage) {
   switch ((stage || "").toLowerCase()) {
-    case "applied": return "bg-primary";
-    case "recruiter_screen": return "bg-info text-dark";
-    case "technical_interview": return "bg-info text-dark";
-    case "final_round": return "bg-warning text-dark";
-    case "offer": return "bg-success";
-    case "contract_signed": return "bg-success";
-    case "rejected": return "bg-secondary";
-    case "no_response": return "bg-secondary";
-    default: return "bg-light text-dark border";
+    case "applied":
+    case "recruiter_screen":
+    case "technical_interview":
+      return "chip-info";
+    case "final_round":
+      return "chip-warning";
+    case "offer":
+    case "contract_signed":
+      return "chip-success";
+    default:
+      return "chip-neutral";
   }
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8.5l3 3 7-7" />
+    </svg>
+  );
+}
+function XIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  );
+}
+function ArrowIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3l5 5-5 5" />
+    </svg>
+  );
+}
+function SpinnerIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M8 2a6 6 0 1 1-6 6" opacity="0.7" />
+    </svg>
+  );
 }
 
 const MATCH_FILTERS = [
@@ -244,68 +275,79 @@ export default function ApplicationsList() {
           <table className="table table-hover align-middle">
             <thead>
               <tr>
-                <th>Date</th>
+                <th style={{ width: 92 }}>Date</th>
                 <th>Company</th>
-                <th>Role</th>
                 <th>Location</th>
-                <th>Source</th>
-                <th>Match</th>
-                <th>Stage</th>
-                <th></th>
+                <th style={{ width: 84 }}>Match</th>
+                <th style={{ width: 150 }}>Stage</th>
+                <th className="text-end" style={{ width: 120 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => (
-                <tr key={row.id}>
-                  <td className="text-muted">{row.date}</td>
-                  <td className="fw-semibold">{row.company}</td>
-                  <td>{row.role}</td>
-                  <td className="text-muted">{row.location}</td>
-                  <td className="text-capitalize text-muted">{row.source}</td>
-                  <td>
-                    <span className={`badge ${matchBadgeClass(row.match_score)}`}>
-                      {row.match_score}%
-                    </span>
+              {filtered.map((row, i) => (
+                <tr key={row.id} style={{ animationDelay: `${Math.min(i * 20, 260)}ms` }}>
+                  <td className="text-muted cell-truncate">{row.date}</td>
+                  <td className="cell-stack">
+                    <span className="cell-primary cell-truncate" title={row.company}>{row.company}</span>
+                    <span className="cell-secondary cell-truncate" title={row.role}>{row.role}</span>
+                  </td>
+                  <td className="cell-stack">
+                    <span className="cell-truncate" title={row.location}>{row.location || "—"}</span>
+                    <span className="cell-secondary text-capitalize cell-truncate">{row.source || "—"}</span>
                   </td>
                   <td>
-                    <span className={`badge ${stageBadgeClass(row.stage)}`}>
+                    <span className={`chip ${matchChipClass(row.match_score)}`}>{row.match_score}%</span>
+                  </td>
+                  <td>
+                    <span className={`chip ${stageChipClass(row.stage)}`}>
                       {stageLabels[row.stage] || row.stage || "—"}
                     </span>
                   </td>
-                  <td className="d-flex gap-2">
-                    {row.stage === "draft" && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-success rounded-pill"
-                        disabled={approvingFolder === row.folder}
-                        onClick={() => handleApprove(row.folder)}
+                  <td>
+                    <div className="d-flex gap-1 justify-content-end">
+                      {row.stage === "draft" && (
+                        <button
+                          type="button"
+                          className={`icon-btn icon-btn-approve${approvingFolder === row.folder ? " icon-btn-spin" : ""}`}
+                          disabled={approvingFolder === row.folder}
+                          title="Approve & Apply"
+                          aria-label="Approve & Apply"
+                          onClick={() => handleApprove(row.folder)}
+                        >
+                          {approvingFolder === row.folder ? <SpinnerIcon /> : <CheckIcon />}
+                        </button>
+                      )}
+                      {row.stage !== "draft" && !row.isTerminal && (
+                        <button
+                          type="button"
+                          className={`icon-btn icon-btn-reject${approvingFolder === row.folder ? " icon-btn-spin" : ""}`}
+                          disabled={approvingFolder === row.folder}
+                          title="Mark as rejected"
+                          aria-label="Mark as rejected"
+                          onClick={() => {
+                            if (window.confirm(`Mark ${row.company} as rejected?`)) {
+                              handleReject(row.folder);
+                            }
+                          }}
+                        >
+                          {approvingFolder === row.folder ? <SpinnerIcon /> : <XIcon />}
+                        </button>
+                      )}
+                      <Link
+                        to={`/applications/${row.id}`}
+                        className="icon-btn icon-btn-details"
+                        title="View details"
+                        aria-label="View details"
                       >
-                        {approvingFolder === row.folder ? "Approving…" : "✅ Approve & Apply"}
-                      </button>
-                    )}
-                    {row.stage !== "draft" && !row.isTerminal && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger rounded-pill"
-                        disabled={approvingFolder === row.folder}
-                        onClick={() => {
-                          if (window.confirm(`Mark ${row.company} as rejected?`)) {
-                            handleReject(row.folder);
-                          }
-                        }}
-                      >
-                        ❌ Reject
-                      </button>
-                    )}
-                    <Link to={`/applications/${row.id}`} className="btn btn-sm btn-outline-primary rounded-pill">
-                      Details
-                    </Link>
+                        <ArrowIcon />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="text-center text-muted py-4">
+                  <td colSpan={6} className="text-center text-muted py-4">
                     No applications match your search.
                   </td>
                 </tr>

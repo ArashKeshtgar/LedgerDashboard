@@ -149,9 +149,17 @@ body {
 }
 .table-card tbody tr {
   transition: background-color 0.12s ease;
+  animation: row-rise 0.28s ease both;
 }
 .table-card tbody tr:hover {
   background-color: #f7f8fa;
+}
+@keyframes row-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .table-card tbody tr, .icon-btn-spin svg { animation: none; }
 }
 
 .search-input-wrap {
@@ -175,6 +183,75 @@ body {
   font-weight: 500;
   padding: 5px 10px;
   border-radius: 999px;
+}
+
+/* ---- Soft chips — tinted, not solid, for score/stage indicators where a
+   full-saturation Bootstrap badge reads as too heavy against the app's
+   soft-shadow/rounded-corner surfaces (Applications table, etc.) ---- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  line-height: 1.3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.chip-success { background: rgba(12, 163, 12, 0.12); color: #0b8a2f; }
+.chip-warning { background: rgba(250, 178, 25, 0.18); color: #8a5d06; }
+.chip-danger  { background: rgba(208, 59, 59, 0.12);  color: #b5372f; }
+.chip-info    { background: rgba(42, 120, 214, 0.12); color: #1f5fad; }
+.chip-neutral { background: rgba(11, 11, 11, 0.06);   color: #57564f; }
+
+/* ---- Compact icon buttons — a finer, quieter alternative to a labeled
+   pill button for a row of repeated per-row actions (table/card actions) ---- */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  color: #8a8983;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+    transform 0.15s ease, box-shadow 0.15s ease;
+}
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.icon-btn:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
+.icon-btn-approve:hover:not(:disabled) {
+  color: #0b8a2f; border-color: rgba(12, 163, 12, 0.35); background: rgba(12, 163, 12, 0.08);
+}
+.icon-btn-reject:hover:not(:disabled) {
+  color: #b5372f; border-color: rgba(208, 59, 59, 0.35); background: rgba(208, 59, 59, 0.08);
+}
+.icon-btn-details:hover:not(:disabled) {
+  color: #1f5fad; border-color: rgba(42, 120, 214, 0.35); background: rgba(42, 120, 214, 0.08);
+}
+.icon-btn-spin svg { animation: icon-spin 0.8s linear infinite; }
+@keyframes icon-spin { to { transform: rotate(360deg); } }
+
+/* ---- Table cell text stacks — a bold primary line + a muted secondary
+   line, both clipped to one line each, so row height stays even no matter
+   how long a company/role/location string is (that's what made the table
+   look unbalanced before: some cells wrapped to 1 line, others to 3). ---- */
+.cell-stack { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cell-primary { font-weight: 600; color: #17171a; }
+.cell-secondary { font-size: 0.78rem; color: #8a8983; }
+.cell-truncate {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- dataviz: reference palette (light default, dark via prefers-color-scheme) ---- */

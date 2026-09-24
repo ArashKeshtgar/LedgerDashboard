@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import session from "express-session";
 import cors from "cors";
 import { parse } from "csv-parse/sync";
 import { load as loadYaml } from "js-yaml";
@@ -13,7 +14,11 @@ import { spawnSync } from "child_process";
 import Anthropic from "@anthropic-ai/sdk";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const JOBSEARCH_DIR = path.resolve(__dirname, "../../JobSearch");
+// Locally this is always the sibling folder. In a deployed environment the
+// real JobSearch/engine data (personal résumé content, application notes)
+// lives on a mounted persistent volume instead, since it's intentionally
+// never in the git repo — JOBSEARCH_DATA_DIR points there.
+const JOBSEARCH_DIR = process.env.JOBSEARCH_DATA_DIR || path.resolve(__dirname, "../../JobSearch");
 const ENGINE_DIR = path.join(JOBSEARCH_DIR, "engine");
 const LEDGER_PATH = path.join(JOBSEARCH_DIR, "engine", "ledger.csv");
 const APPLICATIONS_DIR = path.join(JOBSEARCH_DIR, "engine", "applications");
@@ -58,6 +63,52 @@ const FOLLOWUP_KEY = "follow_up";
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Password gate — only active when DASHBOARD_PASSWORD is set (i.e. in a
+// deployed environment). Local dev with no env var set behaves exactly as
+// before: no session middleware, no login required, zero friction.
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || null;
+
+if (DASHBOARD_PASSWORD) {
+  app.set("trust proxy", 1); // Render/Railway sit behind a proxy — needed for secure cookies
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || DASHBOARD_PASSWORD,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      },
+    })
+  );
+
+  app.post("/api/login", (req, res) => {
+    const { password } = req.body || {};
+    if (password !== DASHBOARD_PASSWORD) {
+      return res.status(401).json({ error: "Wrong password" });
+    }
+    req.session.authed = true;
+    res.json({ authed: true });
+  });
+
+  app.post("/api/logout", (req, res) => {
+    req.session.destroy(() => res.json({ authed: false }));
+  });
+
+  app.get("/api/session", (req, res) => {
+    res.json({ authed: !!req.session?.authed, passwordRequired: true });
+  });
+
+  app.use("/api", (req, res, next) => {
+    if (req.path === "/login" || req.path === "/session") return next();
+    if (req.session?.authed) return next();
+    res.status(401).json({ error: "Login required" });
+  });
+} else {
+  app.get("/api/session", (req, res) => res.json({ authed: true, passwordRequired: false }));
+}
 
 function readCsv(file) {
   const raw = readFileSync(file, "utf-8")
@@ -501,6 +552,24 @@ function selectableFactIds(facts) {
     .map((f) => f.id);
 }
 
+// Skill facts eligible for this build's TECHNICAL SKILLS section: shared
+// lines, lines tagged for the chosen base_variant, and "pool" lines
+// (conditional on an exp.tarashe bullet also being selected — validate.py
+// warns, doesn't block, if one's picked without its matching bullet).
+// "excluded" facts (dropped Perl/C) are never offered — the model can't
+// select what isn't in the enum, same structural guarantee as bullets.
+function selectableSkillIds(facts, variant) {
+  const variantTag = `variant.${variant}`;
+  return Object.values(facts)
+    .filter((f) => f.id.split(".")[0] === "skill")
+    .filter((f) => !(f.tags || []).includes("excluded"))
+    .filter((f) => {
+      const tags = f.tags || [];
+      return tags.includes("shared") || tags.includes(variantTag) || tags.includes("pool");
+    })
+    .map((f) => f.id);
+}
+
 function anthropicClient() {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("ANTHROPIC_API_KEY is not set on the server (see server/.env.example)");
@@ -637,7 +706,7 @@ app.post("/api/packages/analyze", async (req, res) => {
 
 // fact_id is a real enum of the fact bank's bullet-eligible facts, so the
 // model is structurally unable to invent an id the guardian would reject.
-function buildPlanTool(facts) {
+function buildPlanTool(facts, variant) {
   return {
     name: "submit_package",
     description: "Submit the full application package content.",
@@ -660,6 +729,20 @@ function buildPlanTool(facts) {
           },
           minItems: 8,
         },
+        skill_ids: {
+          type: "array",
+          items: { type: "string", enum: selectableSkillIds(facts, variant) },
+          description:
+            "Which TECHNICAL SKILLS lines to include, in display order. Text is pulled " +
+            "verbatim from the fact bank, never rewritten, so pick lines rather than word " +
+            "them. Default to including every core line (skill.languages plus this " +
+            "variant's own Azure/Databases/Web/Practices/Tools lines) — dropping one just " +
+            "because a single posting didn't mention it throws away a fully-verified skill " +
+            "for no reason. Only add skill.his_extras, skill.db_change_management or " +
+            "skill.office_interop_automation when a matching exp.tarashe.* bullet is also " +
+            "selected below — they're the Skills-section half of that bullet, not standalone.",
+          minItems: 1,
+        },
         match_report_markdown: { type: "string" },
         interview_questions_markdown: { type: "string" },
         cover_letter_markdown: {
@@ -672,7 +755,7 @@ function buildPlanTool(facts) {
         },
       },
       required: [
-        "summary", "bullets", "match_report_markdown",
+        "summary", "bullets", "skill_ids", "match_report_markdown",
         "interview_questions_markdown", "cover_letter_markdown",
       ],
     },
@@ -724,7 +807,9 @@ app.post("/api/packages/build", async (req, res) => {
         "bullet must be exactly one of that fact's allowed_numbers (or omit numbers entirely); " +
         "never use any of that fact's forbidden words/phrases; never use the words locks, " +
         "prevents, guarantees or ensures anywhere. Rewrite each bullet's wording (not its " +
-        "underlying facts) to use the posting's own vocabulary. Pick 3-5 bullets per relevant " +
+        "underlying facts) to use the posting's own vocabulary. Also pick which TECHNICAL " +
+        "SKILLS lines to include via skill_ids — that text is used exactly as written in the " +
+        "fact bank, never rewritten, so just choose and order the lines. Pick 3-5 bullets per relevant " +
         "project/role section — do not use every fact, and omit a project/role entirely if it " +
         "has no relevant facts for this posting. EXCEPTION: always include exp.ctdi.description " +
         "(the Material Handler bridge role) regardless of relevance — it explains an otherwise " +
@@ -742,7 +827,7 @@ app.post("/api/packages/build", async (req, res) => {
             `Job posting:\n${postingText}`,
         },
       ],
-      tools: [buildPlanTool(facts)],
+      tools: [buildPlanTool(facts, base_variant)],
       tool_choice: { type: "tool", name: "submit_package" },
     });
 
@@ -755,6 +840,7 @@ app.post("/api/packages/build", async (req, res) => {
       target_role: role,
       summary: generated.summary,
       bullets: generated.bullets,
+      skill_ids: generated.skill_ids,
       match_report_markdown: generated.match_report_markdown,
       cover_letter_markdown: generated.cover_letter_markdown,
       interview_questions_markdown: generated.interview_questions_markdown,
@@ -930,7 +1016,7 @@ if (existsSync(CLIENT_DIST)) {
   });
 }
 
-const PORT = 4310;
+const PORT = process.env.PORT || 4310;
 app.listen(PORT, () => {
   console.log("");
   console.log(`  Ledger Dashboard is running:  http://localhost:${PORT}`);

@@ -2,6 +2,28 @@
 // relative base. In `vite dev` the app runs on another port, so point at 4310.
 const API_BASE = import.meta.env.DEV ? "http://localhost:4310" : "";
 
+export async function checkSession() {
+  const res = await fetch(`${API_BASE}/api/session`);
+  if (!res.ok) throw new Error(`Failed to check session (${res.status})`);
+  return res.json();
+}
+
+export async function login(password) {
+  const res = await fetch(`${API_BASE}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) throw new Error("Wrong password");
+  return res.json();
+}
+
+export async function logout() {
+  const res = await fetch(`${API_BASE}/api/logout`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to log out (${res.status})`);
+  return res.json();
+}
+
 export async function fetchApplications() {
   const res = await fetch(`${API_BASE}/api/applications`);
   if (!res.ok) throw new Error(`Failed to load applications (${res.status})`);

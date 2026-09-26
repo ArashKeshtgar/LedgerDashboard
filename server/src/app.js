@@ -12,6 +12,7 @@ import { passwordMatches, createLoginLimiter, originGuard } from "./security.js"
 import { runProcess, findPython } from "./process.js";
 import { slugify, todayISO, weekStartISO, ISO_DATE_RE } from "./text.js";
 import { RECRUITER_DATE_FIELDS } from "./stores/shape.js";
+import { CONTACT_FIELDS, ContactValidationError, resolveContact } from "./contact.js";
 import { isStoreValidationError } from "./stores/sqlStore.js";
 
 const VALIDATE_TIMEOUT_MS = 30_000;
@@ -48,6 +49,7 @@ export function createApp(cfg, deps = {}) {
   function sendError(res, err) {
     if (err instanceof FileLockedError) return res.status(423).json({ error: err.message });
     if (err instanceof UnsafeFolderError) return res.status(400).json({ error: err.message });
+    if (err instanceof ContactValidationError) return res.status(400).json({ error: err.message });
     // A value the database refused (bad date, too long, duplicate, constraint).
     if (isStoreValidationError(err)) return res.status(400).json({ error: `Invalid value: ${err.message}` });
     console.error(err);
@@ -273,11 +275,14 @@ export function createApp(cfg, deps = {}) {
   // PATCH /api/applications/:id - edit the free-text tracking fields (not
   // pipeline stage — that's POST /api/pipeline-events — and not the posting
   // facts, which come from how the package was built). :id is the folder.
-  const EDITABLE_LEDGER_FIELDS = new Set(["notes", "next_action", "last_contact", "outcome", "gap_tags"]);
+  const EDITABLE_LEDGER_FIELDS = new Set([
+    "notes", "next_action", "last_contact", "outcome", "gap_tags", ...CONTACT_FIELDS,
+  ]);
   app.patch("/api/applications/:id", async (req, res) => {
     try {
       const folder = req.params.id;
-      if (!(await findLedgerRow(folder))) return res.status(404).json({ error: "Not found" });
+      const current = await findLedgerRow(folder);
+      if (!current) return res.status(404).json({ error: "Not found" });
 
       const updates = {};
       for (const [k, v] of Object.entries(req.body || {})) {
@@ -285,6 +290,11 @@ export function createApp(cfg, deps = {}) {
       }
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: "No editable fields in request body" });
+      }
+      // The contact is checked as a whole (see contact.js): an email needs a
+      // source, and a self-found one must be marked verified.
+      if (CONTACT_FIELDS.some((f) => f in updates)) {
+        Object.assign(updates, resolveContact(current, updates));
       }
 
       await store.updateApplication(folder, updates);

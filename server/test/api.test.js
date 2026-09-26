@@ -289,6 +289,42 @@ describe("resume engine", () => {
   });
 });
 
+describe("hiring contact", () => {
+  beforeEach(async () => {
+    server = await start(testConfig(data.root));
+  });
+
+  const patch = (body) => server.call("PATCH", `/api/applications/${FOLDER_A}`, { body });
+
+  it("saves a published contact and returns it on the row", async () => {
+    const res = await patch({ contact_name: "Jane Doe", contact_email: "Jane@Acme.com", contact_source: "ats_email" });
+    expect(res.status).toBe(200);
+    const row = await (await server.call("GET", `/api/applications/${FOLDER_A}`)).json();
+    expect(row).toMatchObject({
+      contact_name: "Jane Doe", contact_email: "jane@acme.com", contact_source: "ats_email", contact_verified: "true",
+    });
+  });
+
+  it("refuses a guessed address and leaves the row unchanged", async () => {
+    const res = await patch({ contact_email: "careers@acme.com", contact_source: "found" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/published or verified/);
+    const row = await (await server.call("GET", `/api/applications/${FOLDER_A}`)).json();
+    expect(row.contact_email).toBe("");
+  });
+
+  it("accepts a self-found address once marked verified, and clears it again", async () => {
+    expect((await patch({ contact_email: "jane@acme.com", contact_source: "found", contact_verified: true })).status).toBe(200);
+    const cleared = await (await patch({ contact_email: "" })).json();
+    expect(cleared).toMatchObject({ contact_email: "", contact_source: "", contact_verified: "" });
+  });
+
+  it("returns empty contact fields on rows that never had one", async () => {
+    const rows = await (await server.call("GET", "/api/applications")).json();
+    expect(rows[1]).toMatchObject({ contact_name: "", contact_email: "", contact_source: "", contact_verified: "" });
+  });
+});
+
 describe("password login", () => {
   const SECRET = "s".repeat(40);
   const PASSWORD = "correct-horse-battery";

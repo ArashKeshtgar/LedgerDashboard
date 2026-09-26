@@ -61,6 +61,24 @@ CREATE TABLE dbo.Applications (
 );
 GO
 
+-- Migration (2026-09-26): the hiring contact to follow up with by email.
+-- Only a published or verified address is ever stored (enforced in
+-- server/src/contact.js), so ContactVerified is set whenever there is one.
+IF COL_LENGTH(N'dbo.Applications', N'ContactEmail') IS NULL
+    ALTER TABLE dbo.Applications ADD
+        ContactName     NVARCHAR(200) NOT NULL CONSTRAINT DF_Applications_ContactName DEFAULT (N''),
+        ContactEmail    NVARCHAR(254) NOT NULL CONSTRAINT DF_Applications_ContactEmail DEFAULT (N''),
+        ContactSource   NVARCHAR(20)  NOT NULL CONSTRAINT DF_Applications_ContactSource DEFAULT (N''),
+        ContactVerified BIT           NOT NULL CONSTRAINT DF_Applications_ContactVerified DEFAULT (0);
+GO
+IF OBJECT_ID(N'dbo.CK_Applications_Contact', N'C') IS NULL
+    ALTER TABLE dbo.Applications ADD CONSTRAINT CK_Applications_Contact CHECK (
+        (ContactEmail = N'' AND ContactSource = N'')
+        OR (ContactEmail LIKE N'_%@_%._%'
+            AND ContactSource IN (N'posting', N'ats_email', N'recruiter_reply', N'found')
+            AND ContactVerified = 1));
+GO
+
 -- Gap tags per application, in display order (was the comma-joined gap_tags
 -- column). The CHECK only admits short kebab-case slugs, so a free-text
 -- sentence can never be stored as a "tag" again, which is the bug that once

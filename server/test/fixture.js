@@ -90,7 +90,14 @@ export async function startApp(cfg, deps = {}) {
       headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...headers },
       body: body ? JSON.stringify(body) : undefined,
     });
-  return { base, call, close: () => new Promise((r) => server.close(r)) };
+  // Drop idle keep-alive sockets too, so a closed test server can't leave a
+  // half-open connection behind for the next test's fetch to trip over.
+  const close = () =>
+    new Promise((r) => {
+      server.close(r);
+      server.closeAllConnections();
+    });
+  return { base, call, close };
 }
 
 export function fakeAnthropic(inputFor) {

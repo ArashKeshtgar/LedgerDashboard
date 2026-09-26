@@ -8,6 +8,7 @@ export const LEDGER_COLUMNS = [
   "poster_name", "end_client", "applied_via", "posting_url", "date_posted",
   "date_seen", "location", "match_score", "variant", "folder", "status",
   "last_contact", "next_action", "outcome", "notes", "gap_tags",
+  "contact_name", "contact_email", "contact_source", "contact_verified",
 ];
 
 export const RECRUITER_COLUMNS = [

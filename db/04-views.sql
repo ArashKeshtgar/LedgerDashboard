@@ -23,6 +23,7 @@ WITH LastStage AS (
 SELECT a.Id AS ApplicationId,
        a.Folder, a.Company, a.Role, a.Source, a.MatchScore, a.AppliedDate,
        COALESCE(ls.StageKey, a.Status) AS CurrentStage,
+       CAST(CASE WHEN a.ContactEmail <> N'' THEN 1 ELSE 0 END AS bit) AS HasContactEmail,
        st.Kind AS StageKind,
        CAST(ISNULL(st.IsWaiting, 0) AS bit) AS IsWaiting,
        ls.EventDate AS StageSince,
@@ -41,7 +42,7 @@ GO
 -- 7 days since the last action (entering the stage or the last follow-up),
 -- the same threshold as FOLLOWUP_THRESHOLD_DAYS in the dashboard.
 CREATE OR ALTER VIEW dbo.vFollowupsDue AS
-SELECT c.Folder, c.Company, c.Role, c.CurrentStage,
+SELECT c.Folder, c.Company, c.Role, c.CurrentStage, c.HasContactEmail,
        COALESCE(c.LastFollowupDate, c.StageSince) AS LastActionDate,
        DATEDIFF(day, COALESCE(c.LastFollowupDate, c.StageSince), CAST(SYSDATETIME() AS date)) AS DaysSinceAction
 FROM dbo.vApplicationCurrentStage c

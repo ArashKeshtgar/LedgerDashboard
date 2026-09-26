@@ -9,6 +9,7 @@ import { createLoginLimiter, passwordMatches } from "../src/security.js";
 import { loadConfig } from "../src/config.js";
 import { runProcess } from "../src/process.js";
 import { slugify, weekStartISO } from "../src/text.js";
+import { resolveContact, ContactValidationError } from "../src/contact.js";
 
 describe("csv", () => {
   it("quotes fields containing commas, quotes and line breaks", () => {
@@ -198,5 +199,45 @@ describe("text helpers", () => {
   it("starts weeks on Monday", () => {
     expect(weekStartISO(new Date(2026, 8, 27))).toBe("2026-09-21"); // Sunday
     expect(weekStartISO(new Date(2026, 8, 21))).toBe("2026-09-21"); // Monday
+  });
+});
+
+describe("resolveContact (published or verified emails only)", () => {
+  const none = {};
+
+  it("stores a published address and marks it verified", () => {
+    expect(resolveContact(none, { contact_name: " Jane Doe ", contact_email: "Jane@Acme.com ", contact_source: "posting" }))
+      .toEqual({ contact_name: "Jane Doe", contact_email: "jane@acme.com", contact_source: "posting", contact_verified: "true" });
+  });
+
+  it("refuses a self-found address that wasn't verified", () => {
+    expect(() => resolveContact(none, { contact_email: "careers@acme.com", contact_source: "found" }))
+      .toThrow(ContactValidationError);
+  });
+
+  it("accepts a self-found address once it is marked verified", () => {
+    expect(resolveContact(none, { contact_email: "jane@acme.com", contact_source: "found", contact_verified: true }))
+      .toMatchObject({ contact_source: "found", contact_verified: "true" });
+  });
+
+  it.each([
+    ["an invalid address", { contact_email: "not-an-email", contact_source: "posting" }],
+    ["a missing source", { contact_email: "jane@acme.com" }],
+    ["an unknown source", { contact_email: "jane@acme.com", contact_source: "guessed" }],
+  ])("refuses %s", (_label, input) => {
+    expect(() => resolveContact(none, input)).toThrow(ContactValidationError);
+  });
+
+  it("clears source and verified when the email is removed, keeping the name", () => {
+    const current = { contact_name: "Jane", contact_email: "jane@acme.com", contact_source: "posting", contact_verified: "true" };
+    expect(resolveContact(current, { contact_email: "" }))
+      .toEqual({ contact_name: "Jane", contact_email: "", contact_source: "", contact_verified: "" });
+  });
+
+  it("merges a partial update with the current contact", () => {
+    const current = { contact_name: "Jane", contact_email: "jane@acme.com", contact_source: "ats_email", contact_verified: "true" };
+    expect(resolveContact(current, { contact_name: "Jane Doe" })).toMatchObject({
+      contact_name: "Jane Doe", contact_email: "jane@acme.com", contact_source: "ats_email",
+    });
   });
 });

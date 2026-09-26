@@ -19,8 +19,11 @@ export function createCsvStore(engineDir) {
 
   // A row's id is its folder — stable across edits, deletes and hand edits
   // of ledger.csv, unlike an array index.
+  // Columns added later (the contact fields) are "" on rows written before
+  // they existed, the same as SQL's defaults.
+  const EMPTY_ROW = Object.fromEntries(LEDGER_COLUMNS.map((c) => [c, ""]));
   function readLedger() {
-    return readCsv(LEDGER_PATH).map((r) => ({ id: r.folder, ...r }));
+    return readCsv(LEDGER_PATH).map((r) => ({ id: r.folder, ...EMPTY_ROW, ...r }));
   }
 
   // Rewrites ledger.csv wholesale (small file) — atomically, via a temp

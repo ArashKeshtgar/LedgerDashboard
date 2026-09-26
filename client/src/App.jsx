@@ -1,6 +1,7 @@
 import { HashRouter, Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
 import DailyLine from "./components/DailyLine.jsx";
+import UpdateBanner from "./components/UpdateBanner.jsx";
 import LoginGate from "./components/LoginGate.jsx";
 import ApplicationsList from "./pages/ApplicationsList.jsx";
 import ApplicationDetail from "./pages/ApplicationDetail.jsx";
@@ -18,6 +19,7 @@ export default function App() {
           <Navbar />
           <main className="app-scroll-panel">
             <div className="container py-4">
+              <UpdateBanner />
               <DailyLine />
               <Routes>
                 <Route path="/" element={<ApplicationsList />} />

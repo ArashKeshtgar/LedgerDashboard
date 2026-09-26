@@ -31,6 +31,10 @@ export const APPLICATION_COLUMNS = {
   next_action: { column: "NextAction" },
   outcome: { column: "Outcome" },
   notes: { column: "Notes" },
+  contact_name: { column: "ContactName" },
+  contact_email: { column: "ContactEmail" },
+  contact_source: { column: "ContactSource" },
+  contact_verified: { column: "ContactVerified", type: "flag" },
 };
 
 export const RECRUITER_COLUMNS_SQL = {
@@ -59,6 +63,7 @@ function selectList(columns, alias) {
       // char(10) would turn the "" fallback into ten spaces (truthy).
       if (type === "date") return `ISNULL(CONVERT(varchar(10), ${ref}, 23), '') AS [${field}]`;
       if (type === "score") return `ISNULL(CAST(${ref} AS nvarchar(3)), '') AS [${field}]`;
+      if (type === "flag") return `CASE WHEN ${ref} = 1 THEN 'true' ELSE '' END AS [${field}]`;
       return `${ref} AS [${field}]`;
     })
     .join(",\n      ");
@@ -80,6 +85,7 @@ const RECRUITER_SELECT = `
 function toDbValue(value, type) {
   const s = value === null || value === undefined ? "" : String(value).trim();
   if (type === "date" || type === "score") return s === "" ? null : s;
+  if (type === "flag") return s === "true" ? "true" : "";
   return value === null || value === undefined ? "" : String(value);
 }
 
@@ -87,6 +93,7 @@ function toDbValue(value, type) {
 export function valueExpr(param, type) {
   if (type === "date") return `CAST(@${param} AS date)`;
   if (type === "score") return `CAST(@${param} AS tinyint)`;
+  if (type === "flag") return `CASE WHEN @${param} = 'true' THEN 1 ELSE 0 END`;
   return `@${param}`;
 }
 

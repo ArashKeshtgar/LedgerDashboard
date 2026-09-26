@@ -10,6 +10,9 @@ import {
   deleteApplication,
 } from "../api.js";
 import StageTimeline from "../components/StageTimeline.jsx";
+import ContactCard from "../components/ContactCard.jsx";
+import ContactEditor from "../components/ContactEditor.jsx";
+import { daysUntilFollowup, followupMailto } from "../contact.js";
 
 // Pipeline event dates are usually a plain YYYY-MM-DD, but the "Record a
 // stage update" form can attach a time too ("...T14:30") — show that as a
@@ -178,6 +181,12 @@ export default function ApplicationDetail() {
   const [decisionError, setDecisionError] = useState(null);
   const [decisionErrorDetails, setDecisionErrorDetails] = useState(null);
   const [justBuilt, setJustBuilt] = useState(false);
+  // Marking as sent first asks for the hiring contact: that's the moment the
+  // posting and the ATS confirmation email are right in front of you.
+  const [askContact, setAskContact] = useState(false);
+  const [contactSaving, setContactSaving] = useState(false);
+  const [contactError, setContactError] = useState(null);
+  const [mailOpened, setMailOpened] = useState(false);
   const [showRebuild, setShowRebuild] = useState(false);
   const [followupPending, setFollowupPending] = useState(false);
   const [followupError, setFollowupError] = useState(null);
@@ -204,12 +213,44 @@ export default function ApplicationDetail() {
   if (error) return <div className="alert alert-danger">{error}</div>;
   if (!app) return <div className="text-center py-5 text-muted">Loading…</div>;
 
+  function startApprove() {
+    if (app.contact_email) handleApprove();
+    else setAskContact(true);
+  }
+
+  async function saveContactAndApprove(fields) {
+    setContactError(null);
+    setContactSaving(true);
+    try {
+      if (fields.contact_email || fields.contact_name) {
+        const updated = await updateApplication(app.id, fields);
+        setApp((a) => ({ ...a, ...updated }));
+      }
+      await handleApprove();
+    } catch (e) {
+      setContactError(e.message);
+    } finally {
+      setContactSaving(false);
+    }
+  }
+
+  async function saveContact(fields) {
+    const updated = await updateApplication(app.id, fields);
+    setApp((a) => ({ ...a, ...updated }));
+  }
+
+  async function handleEmailFollowupLogged() {
+    await handleLogFollowup(`Emailed ${app.contact_email}`);
+    setMailOpened(false);
+  }
+
   async function handleApprove() {
     setApproveError(null);
     setApproving(true);
     try {
       const updated = await moveApplicationStage(app.folder, "applied");
       setApp((a) => ({ ...a, ...updated }));
+      setAskContact(false);
     } catch (e) {
       setApproveError(e.message);
     } finally {
@@ -281,11 +322,11 @@ export default function ApplicationDetail() {
     }
   }
 
-  async function handleLogFollowup() {
+  async function handleLogFollowup(note = "") {
     setFollowupError(null);
     setFollowupPending(true);
     try {
-      const updated = await logFollowup(app.folder);
+      const updated = await logFollowup(app.folder, note);
       setApp((a) => ({ ...a, ...updated }));
     } catch (e) {
       setFollowupError(e.message);
@@ -446,8 +487,8 @@ export default function ApplicationDetail() {
               <button
                 type="button"
                 className="btn btn-sm btn-success rounded-pill"
-                disabled={approving || deleting}
-                onClick={handleApprove}
+                disabled={approving || deleting || askContact}
+                onClick={startApprove}
               >
                 {approving ? "Approving…" : "📤 Approve & Apply — mark as sent"}
               </button>
@@ -518,11 +559,37 @@ export default function ApplicationDetail() {
           <button
             type="button"
             className="btn btn-sm btn-success rounded-pill"
-            disabled={approving}
-            onClick={handleApprove}
+            disabled={approving || askContact}
+            onClick={startApprove}
           >
             {approving ? "Approving…" : "✅ Approve & Apply"}
           </button>
+        </div>
+      )}
+
+      {app.stage === "draft" && askContact && (
+        <div className="alert alert-info mb-3">
+          <div className="fw-semibold mb-1">✉️ Who did you apply to?</div>
+          <div className="small text-muted mb-2">
+            Grab the recruiter or hiring manager's email now, while you have the posting and the ATS
+            confirmation open. It's what the follow-up email goes to. Only published or verified addresses are saved.
+          </div>
+          <ContactEditor
+            initial={app}
+            onSave={saveContactAndApprove}
+            onCancel={() => { setAskContact(false); setContactError(null); }}
+            saveLabel="Save contact & mark as sent"
+            saving={contactSaving || approving}
+            extraActions={
+              <button type="button" className="btn btn-sm btn-outline-primary rounded-pill"
+                disabled={contactSaving || approving} onClick={() => saveContactAndApprove({})}>
+                Mark as sent without a contact
+              </button>
+            }
+          />
+          {contactError && (
+            <div className="alert alert-danger py-2 px-3 mt-2 mb-0" role="alert">{contactError}</div>
+          )}
         </div>
       )}
 
@@ -655,6 +722,8 @@ export default function ApplicationDetail() {
         </div>
       </div>
 
+      <ContactCard app={app} onSave={saveContact} />
+
       {stages.stages && stages.stages.length > 0 && (
         <div className="card mb-4">
           <div className="card-header">Pipeline stage</div>
@@ -689,16 +758,47 @@ export default function ApplicationDetail() {
                       }`
                     : "No follow-up logged yet in this stage."}
                 </div>
-                <button
-                  type="button"
-                  className={`btn btn-sm rounded-pill ${
-                    app.needsFollowup ? "btn-warning" : "btn-outline-secondary"
-                  }`}
-                  disabled={followupPending}
-                  onClick={handleLogFollowup}
-                >
-                  {followupPending ? "Logging…" : "🔁 Log follow-up"}
+                <div className="d-flex flex-wrap gap-2">
+                  {app.contact_email && app.needsFollowup && (
+                    <a
+                      className="btn btn-sm btn-warning rounded-pill"
+                      href={followupMailto(app)}
+                      onClick={() => setMailOpened(true)}
+                    >
+                      ✉️ Email follow-up
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    className={`btn btn-sm rounded-pill ${
+                      app.needsFollowup && !app.contact_email ? "btn-warning" : "btn-outline-secondary"
+                    }`}
+                    disabled={followupPending}
+                    onClick={() => handleLogFollowup()}
+                  >
+                    {followupPending ? "Logging…" : "🔁 Log follow-up"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {canFollowup && mailOpened && (
+              <div className="alert alert-warning py-2 px-3 mt-2 mb-0 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <span className="small">Your mail app opened with the draft. Sent it?</span>
+                <button type="button" className="btn btn-sm btn-success rounded-pill" disabled={followupPending}
+                  onClick={handleEmailFollowupLogged}>
+                  ✅ Yes, log it
                 </button>
+              </div>
+            )}
+            {canFollowup && !app.needsFollowup && app.contact_email && daysUntilFollowup(app) > 0 && (
+              <div className="small text-muted mt-2">
+                ✉️ Email follow-up unlocks in {daysUntilFollowup(app)} day{daysUntilFollowup(app) === 1 ? "" : "s"}
+                {" "}(7 days without a reply).
+              </div>
+            )}
+            {canFollowup && !app.contact_email && (
+              <div className="small text-muted mt-2">
+                ✉️ Add the hiring contact's email above to follow up by email.
               </div>
             )}
             {followupError && (

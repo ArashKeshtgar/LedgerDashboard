@@ -15,23 +15,35 @@ RUN pip install --no-cache-dir --break-system-packages python-docx pyyaml
 
 WORKDIR /app
 
+# npm ci: install exactly what the lockfiles pin, and fail if they drift.
 COPY server/package*.json ./server/
-RUN cd server && npm install --omit=dev
+RUN cd server && npm ci --omit=dev
 
 COPY client/package*.json ./client/
-RUN cd client && npm install
+RUN cd client && npm ci
 
 COPY client ./client
-RUN cd client && npm run build
+RUN cd client && npm run build && rm -rf node_modules
 
 COPY server ./server
 
 # JOBSEARCH_DATA_DIR must point at a mounted persistent volume with the
 # real JobSearch/engine content (scripts, facts, ledger.csv, applications/)
 # uploaded once — that data is intentionally never baked into this image,
-# same reason it's not in the git repo. DASHBOARD_PASSWORD and
-# ANTHROPIC_API_KEY are set as platform secrets, not here.
-ENV JOBSEARCH_DATA_DIR=/data/JobSearch
+# same reason it's not in the git repo. DASHBOARD_PASSWORD, SESSION_SECRET
+# and ANTHROPIC_API_KEY are set as platform secrets, not here; the server
+# refuses to start on 0.0.0.0 without the first two.
+#
+# NODE_ENV=production turns on Secure cookies and hides internal error
+# details from API responses. The mount point is created owned by the
+# unprivileged `node` user so a fresh volume is writable without root.
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    JOBSEARCH_DATA_DIR=/data/JobSearch \
+    PYTHON=python3
+RUN mkdir -p /data/JobSearch && chown -R node:node /data
+
+USER node
 EXPOSE 4310
 
 CMD ["node", "server/index.js"]

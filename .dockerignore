@@ -1,6 +1,8 @@
-node_modules
-client/dist
-*.log
-.env
+**/node_modules
+**/dist
+**/*.log
+**/.env
 .git
 .claude
+.github
+server/test

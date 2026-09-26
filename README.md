@@ -101,6 +101,13 @@ npm run migrate:sql -- --verify  # compare only
 npm run export:csv               # SQL -> CSV snapshot in engine/sql-export/<time>/
 ```
 
+**Reporting views for other systems** (`db/04-views.sql`, `db/05-reader-login.sql`): `vApplicationCurrentStage`, `vFollowupsDue`, `vFunnelBySource` and `vGapTagStats` compute in SQL what the dashboard computes in JavaScript (current stage, the 7-day follow-up rule, outcomes by source, gap tags vs rejections), and give the same numbers. The `ledger_reader` login can SELECT those four views and nothing else, not even the tables. Control Panel's `ledgerdash-adapter` connects with it.
+
+```bash
+sqlcmd -S . -E -b -d LedgerDashboard -i db/04-views.sql
+sqlcmd -S . -E -b -i db/05-reader-login.sql -v READER_PASSWORD="<password>"
+```
+
 The migration never modifies the CSV files; they remain as the backup. It skips pipeline events whose application is no longer in the ledger and removes repeated gap-tag slugs, and lists both. The verification then compares every field, event, stage, recruiter and the computed pipeline view. To go back, remove `STORE=sql` and restart.
 
 **Once on SQL, editing the CSV files has no effect.** Record stages from the UI or the API:

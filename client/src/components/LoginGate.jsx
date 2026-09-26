@@ -20,8 +20,8 @@ export default function LoginGate({ children }) {
     try {
       await login(password);
       setStatus("ok");
-    } catch {
-      setError("Wrong password.");
+    } catch (err) {
+      setError(err.message || "Wrong password.");
     } finally {
       setSubmitting(false);
     }

@@ -1,0 +1,70 @@
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+const MIN_SESSION_SECRET_LENGTH = 32;
+const MIN_PASSWORD_LENGTH = 12;
+
+// Vite's dev server runs the client on its own port and calls this API
+// cross-origin. Those are the only foreign origins ever allowed, and only
+// outside production — the built app is served by this server itself.
+const DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+// Reads and validates every environment setting in one place, so a
+// dangerous combination stops the server at startup instead of running.
+export function loadConfig(env = process.env) {
+  const production = env.NODE_ENV === "production";
+  const password = env.DASHBOARD_PASSWORD || null;
+
+  // With no password there's no login at all, so the API must only be
+  // reachable from this machine — not from the LAN or the internet.
+  const host = env.HOST || (password ? "0.0.0.0" : "127.0.0.1");
+  if (!password && !LOOPBACK_HOSTS.has(host)) {
+    throw new Error(
+      `Refusing to listen on HOST=${host} without DASHBOARD_PASSWORD — ` +
+        "with no password the API is unauthenticated, so it only binds to 127.0.0.1."
+    );
+  }
+
+  let sessionSecret = null;
+  if (password) {
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      throw new Error(`DASHBOARD_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+    }
+    sessionSecret = env.SESSION_SECRET || "";
+    if (sessionSecret.length < MIN_SESSION_SECRET_LENGTH) {
+      throw new Error(
+        `SESSION_SECRET must be set to a random value of at least ${MIN_SESSION_SECRET_LENGTH} ` +
+          "characters whenever DASHBOARD_PASSWORD is set."
+      );
+    }
+    if (sessionSecret === password) {
+      throw new Error("SESSION_SECRET must be different from DASHBOARD_PASSWORD.");
+    }
+  }
+
+  const extraOrigins = (env.CORS_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  return {
+    production,
+    host,
+    port: Number(env.PORT) || 4310,
+    password,
+    sessionSecret,
+    allowedOrigins: [...(production ? [] : DEV_ORIGINS), ...extraOrigins],
+    // Locally this is always the sibling folder. In a deployed environment
+    // the real JobSearch/engine data (personal résumé content, application
+    // notes) lives on a mounted persistent volume instead, since it's
+    // intentionally never in the git repo — JOBSEARCH_DATA_DIR points there.
+    jobsearchDir: env.JOBSEARCH_DATA_DIR || path.resolve(__dirname, "../../../JobSearch"),
+    clientDist: path.resolve(__dirname, "../../client/dist"),
+    motivationPath: path.resolve(__dirname, "../../motivation.yml"),
+    anthropicApiKey: env.ANTHROPIC_API_KEY || null,
+    python: env.PYTHON || null,
+  };
+}

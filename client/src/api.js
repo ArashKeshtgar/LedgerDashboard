@@ -14,7 +14,12 @@ export async function login(password) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password }),
   });
-  if (!res.ok) throw new Error("Wrong password");
+  if (!res.ok) {
+    // 401 wrong password, 429 locked out after too many tries — show the
+    // server's own message so the lockout wait is visible.
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Wrong password");
+  }
   return res.json();
 }
 
@@ -31,7 +36,7 @@ export async function fetchApplications() {
 }
 
 export async function fetchApplication(id) {
-  const res = await fetch(`${API_BASE}/api/applications/${id}`);
+  const res = await fetch(`${API_BASE}/api/applications/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`Failed to load application ${id} (${res.status})`);
   return res.json();
 }
@@ -61,7 +66,7 @@ export async function fetchRecruiters() {
 }
 
 export async function updateRecruiterStatus(id, field, value) {
-  const res = await fetch(`${API_BASE}/api/recruiters/${id}`, {
+  const res = await fetch(`${API_BASE}/api/recruiters/${encodeURIComponent(id)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ field, value }),
@@ -100,7 +105,7 @@ export async function createApplication(fields) {
 }
 
 export async function updateApplication(id, fields) {
-  const res = await fetch(`${API_BASE}/api/applications/${id}`, {
+  const res = await fetch(`${API_BASE}/api/applications/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(fields),
@@ -124,7 +129,7 @@ export async function analyzePosting({ company, role, postingText, location, sou
 }
 
 export async function deleteApplication(id) {
-  const res = await fetch(`${API_BASE}/api/applications/${id}`, { method: "DELETE" });
+  const res = await fetch(`${API_BASE}/api/applications/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Failed to delete application (${res.status})`);

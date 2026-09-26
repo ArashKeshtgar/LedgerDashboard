@@ -1,0 +1,202 @@
+import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import path from "path";
+import { csvField, readCsv, toCsv, writeFileAtomic } from "../src/csv.js";
+import { isSafeFolderName, resolveApplicationFolder } from "../src/paths.js";
+import { attachPipeline, FOLLOWUP_THRESHOLD_DAYS } from "../src/pipeline.js";
+import { createLoginLimiter, passwordMatches } from "../src/security.js";
+import { loadConfig } from "../src/config.js";
+import { runProcess } from "../src/process.js";
+import { slugify, weekStartISO } from "../src/text.js";
+
+describe("csv", () => {
+  it("quotes fields containing commas, quotes and line breaks", () => {
+    expect(csvField("plain")).toBe("plain");
+    expect(csvField("a,b")).toBe('"a,b"');
+    expect(csvField('say "hi"')).toBe('"say ""hi"""');
+    expect(csvField("line\nbreak")).toBe('"line\nbreak"');
+    expect(csvField("cr\ronly")).toBe('"cr\ronly"');
+    expect(csvField(null)).toBe("");
+  });
+
+  it("round-trips awkward values through toCsv and readCsv", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "csv-"));
+    const file = path.join(dir, "t.csv");
+    const rows = [{ a: "x, y", b: 'quote "q"' }, { a: "سلام", b: "" }];
+    writeFileSync(file, "\uFEFF" + toCsv(["a", "b"], rows));
+    expect(readCsv(file)).toEqual(rows);
+  });
+
+  it("writes atomically: replaces the file and leaves no temp file", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "atomic-"));
+    const file = path.join(dir, "ledger.csv");
+    writeFileSync(file, "old");
+    writeFileAtomic(file, "new");
+    expect(readFileSync(file, "utf-8")).toBe("new");
+    expect(readdirSync(dir)).toEqual(["ledger.csv"]);
+  });
+});
+
+describe("application folder paths", () => {
+  const root = path.join(tmpdir(), "apps");
+
+  it("accepts generated folder names", () => {
+    expect(isSafeFolderName("2026-09-13__TELUS-Health__Intermediate-Backend-Developer")).toBe(true);
+    expect(resolveApplicationFolder(root, "2026-09-13__A__B")).toBe(path.join(root, "2026-09-13__A__B"));
+  });
+
+  it.each(["", ".", "..", "../facts", "a/../../b", "a/b", "a\\b", "C:\\x", "/etc", " spaced", null, 42])(
+    "rejects %j",
+    (name) => {
+      expect(isSafeFolderName(name)).toBe(false);
+      expect(() => resolveApplicationFolder(root, name)).toThrow(/Invalid application folder/);
+    }
+  );
+});
+
+describe("attachPipeline", () => {
+  const stages = {
+    stages: [{ key: "draft" }, { key: "applied", waiting: true }, { key: "technical_interview" }],
+    terminal: [{ key: "rejected" }],
+  };
+  const now = new Date("2026-09-26T12:00:00");
+  const row = { folder: "f", status: "draft" };
+
+  it("falls back to the ledger status when there are no events", () => {
+    const [r] = attachPipeline([row], [], stages, now);
+    expect(r.stage).toBe("draft");
+    expect(r.stageIndex).toBe(0);
+  });
+
+  it("takes the last stage event, ignoring follow-ups for the stage", () => {
+    const events = [
+      { folder: "f", stage: "applied", date: "2026-09-10" },
+      { folder: "f", stage: "follow_up", date: "2026-09-20" },
+    ];
+    const [r] = attachPipeline([row], events, stages, now);
+    expect(r.stage).toBe("applied");
+    expect(r.daysInStage).toBe(16);
+    expect(r.followupCount).toBe(1);
+    expect(r.daysSinceAction).toBe(6); // the follow-up reset the clock
+    expect(r.needsFollowup).toBe(false);
+  });
+
+  it(`flags a waiting stage after more than ${FOLLOWUP_THRESHOLD_DAYS} silent days`, () => {
+    const events = [{ folder: "f", stage: "applied", date: "2026-09-10" }];
+    expect(attachPipeline([row], events, stages, now)[0].needsFollowup).toBe(true);
+  });
+
+  it("reports a future-dated stage as days until, not a negative age", () => {
+    const events = [{ folder: "f", stage: "technical_interview", date: "2026-10-01" }];
+    const [r] = attachPipeline([row], events, stages, now);
+    expect(r.daysInStage).toBeNull();
+    expect(r.daysUntilStage).toBe(5);
+  });
+
+  it("ignores follow-ups logged before the current stage", () => {
+    const events = [
+      { folder: "f", stage: "follow_up", date: "2026-09-01" },
+      { folder: "f", stage: "rejected", date: "2026-09-05" },
+    ];
+    const [r] = attachPipeline([row], events, stages, now);
+    expect(r.isTerminal).toBe(true);
+    expect(r.followupCount).toBe(0);
+  });
+});
+
+describe("login security", () => {
+  it("compares passwords correctly, including different lengths", () => {
+    expect(passwordMatches("secret-password", "secret-password")).toBe(true);
+    expect(passwordMatches("secret", "secret-password")).toBe(false);
+    expect(passwordMatches(undefined, "secret-password")).toBe(false);
+  });
+
+  it("locks an IP out after 5 failures and lets it back in after the window", () => {
+    let t = 0;
+    const limiter = createLoginLimiter({ maxFailures: 5, windowMs: 1000, now: () => t });
+    for (let i = 0; i < 4; i++) limiter.recordFailure("1.1.1.1");
+    expect(limiter.retryAfterSeconds("1.1.1.1")).toBe(0);
+    limiter.recordFailure("1.1.1.1");
+    expect(limiter.retryAfterSeconds("1.1.1.1")).toBe(1);
+    expect(limiter.retryAfterSeconds("2.2.2.2")).toBe(0); // per IP
+    t = 1000;
+    expect(limiter.retryAfterSeconds("1.1.1.1")).toBe(0);
+  });
+
+  it("clears the count on a successful login", () => {
+    const limiter = createLoginLimiter({ maxFailures: 2 });
+    limiter.recordFailure("ip");
+    limiter.recordSuccess("ip");
+    limiter.recordFailure("ip");
+    expect(limiter.retryAfterSeconds("ip")).toBe(0);
+  });
+});
+
+describe("loadConfig", () => {
+  const secret = "x".repeat(32);
+
+  it("binds to 127.0.0.1 with no password", () => {
+    expect(loadConfig({}).host).toBe("127.0.0.1");
+  });
+
+  it("refuses a public HOST without a password", () => {
+    expect(() => loadConfig({ HOST: "0.0.0.0" })).toThrow(/without DASHBOARD_PASSWORD/);
+  });
+
+  it("requires a long, distinct SESSION_SECRET when a password is set", () => {
+    expect(() => loadConfig({ DASHBOARD_PASSWORD: "long-enough-pass" })).toThrow(/SESSION_SECRET/);
+    expect(() => loadConfig({ DASHBOARD_PASSWORD: "long-enough-pass", SESSION_SECRET: "short" })).toThrow();
+    expect(() =>
+      loadConfig({ DASHBOARD_PASSWORD: secret, SESSION_SECRET: secret })
+    ).toThrow(/different/);
+    const cfg = loadConfig({ DASHBOARD_PASSWORD: "long-enough-pass", SESSION_SECRET: secret });
+    expect(cfg.host).toBe("0.0.0.0");
+  });
+
+  it("rejects a short dashboard password", () => {
+    expect(() => loadConfig({ DASHBOARD_PASSWORD: "short", SESSION_SECRET: secret })).toThrow(/at least 12/);
+  });
+
+  it("allows the Vite dev origin only outside production", () => {
+    expect(loadConfig({}).allowedOrigins).toContain("http://localhost:5173");
+    expect(
+      loadConfig({ NODE_ENV: "production", DASHBOARD_PASSWORD: "long-enough-pass", SESSION_SECRET: secret })
+        .allowedOrigins
+    ).toEqual([]);
+  });
+});
+
+describe("runProcess", () => {
+  it("returns exit status and output without blocking", async () => {
+    const r = await runProcess(process.execPath, ["-e", "console.log('hi'); process.exit(3)"]);
+    expect(r.status).toBe(3);
+    expect(r.stdout.trim()).toBe("hi");
+    expect(r.timedOut).toBe(false);
+  });
+
+  it("kills a process that runs past its timeout", async () => {
+    const started = Date.now();
+    const r = await runProcess(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], { timeoutMs: 300 });
+    expect(r.timedOut).toBe(true);
+    expect(r.status).toBeNull();
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
+  it("reports a missing executable instead of throwing", async () => {
+    const r = await runProcess("definitely-not-a-real-binary-xyz", []);
+    expect(r.status).toBeNull();
+  });
+});
+
+describe("text helpers", () => {
+  it("slugifies roles for folder names", () => {
+    expect(slugify("Sr. Power Platform Developer (Remote)")).toBe("Sr-Power-Platform-Developer");
+    expect(slugify("شرکت")).toBe("");
+  });
+
+  it("starts weeks on Monday", () => {
+    expect(weekStartISO(new Date(2026, 8, 27))).toBe("2026-09-21"); // Sunday
+    expect(weekStartISO(new Date(2026, 8, 21))).toBe("2026-09-21"); // Monday
+  });
+});

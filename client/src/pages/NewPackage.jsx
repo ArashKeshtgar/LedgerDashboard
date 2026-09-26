@@ -56,7 +56,7 @@ export default function NewPackage() {
       setStep("building"); // reuse as a generic "busy" state to disable the buttons
       try {
         await deleteApplication(analysis.id);
-      } catch (err) {
+      } catch {
         // Even if cleanup fails, the user asked to leave — don't trap them here.
       }
       navigate("/");

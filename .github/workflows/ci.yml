@@ -27,10 +27,10 @@ jobs:
       TEST_SQL_USER: sa
       TEST_SQL_PASSWORD: Ci-only_Throwaway1!
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: server/package-lock.json
       - name: Install
@@ -43,10 +43,10 @@ jobs:
   client:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: client/package-lock.json
       - name: Install
@@ -63,9 +63,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [server, client]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false

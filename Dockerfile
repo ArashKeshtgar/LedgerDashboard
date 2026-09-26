@@ -2,7 +2,7 @@
 # needs Python and LibreOffice at runtime, which a plain Node buildpack
 # won't provide — hence a Dockerfile instead of relying on the platform's
 # default Node detection.
-FROM node:20-slim
+FROM node:22-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \

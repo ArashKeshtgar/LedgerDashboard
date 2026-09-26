@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchApplications, fetchGapTags } from "../api.js";
+import { fetchApplications, fetchGapTags, fetchPipelineStages } from "../api.js";
 import BarChart from "../components/BarChart.jsx";
 
 const SCORE_BUCKETS = [
@@ -10,24 +10,54 @@ const SCORE_BUCKETS = [
   { label: "70%+", test: (n) => n >= 70, color: "#1c5cab" },
 ];
 
-const STATUS_ORDER = [
-  { key: "draft", label: "Draft", icon: "📝", color: "#898781" },
-  { key: "applied", label: "Applied", icon: "📤", color: "#2a78d6" },
-  { key: "interview", label: "Interview", icon: "🎤", color: "#fab219" },
-  { key: "offer", label: "Offer", icon: "🎉", color: "#0ca30c" },
-  { key: "rejected", label: "Rejected", icon: "❌", color: "#d03b3b" },
-];
+// Colour by what a stage means (waiting on the employer, an interview
+// round, a win, a loss) rather than by a hardcoded list of keys.
+function stageColor(stage, kind) {
+  if (stage.key === "rejected") return "#d03b3b";
+  if (kind === "terminal") return "#898781";
+  if (stage.key === "offer" || stage.key === "contract_signed") return "#0ca30c";
+  if (stage.key === "applied") return "#2a78d6";
+  return "#fab219";
+}
+
+// One bar per real pipeline stage (from the server's stage definitions),
+// counted by each application's CURRENT stage — the one computed from its
+// pipeline events. The ledger's own `status` column is only set when a row
+// is created and is never updated, so counting it showed moved-on
+// applications as still "Draft".
+function stageBreakdown(rows, defs) {
+  const ordered = [
+    ...defs.stages.filter((s) => s.key !== "draft").map((s) => ({ s, kind: "stage" })),
+    ...defs.terminal.map((s) => ({ s, kind: "terminal" })),
+  ];
+  const known = new Set(ordered.map(({ s }) => s.key));
+  const items = ordered.map(({ s, kind }) => ({
+    label: s.label || s.key,
+    icon: s.icon,
+    value: rows.filter((r) => r.stage === s.key).length,
+    color: stageColor(s, kind),
+  }));
+  const other = rows.filter((r) => !known.has(r.stage)).length;
+  if (other) items.push({ label: "Other", icon: "❔", value: other, color: "#898781" });
+  return items;
+}
 
 export default function StatsPage() {
   const [rows, setRows] = useState(null);
   const [gapDict, setGapDict] = useState({});
+  const [stageDefs, setStageDefs] = useState({ stages: [], terminal: [] });
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    Promise.all([fetchApplications(), fetchGapTags().catch(() => ({}))])
-      .then(([apps, gaps]) => {
+    Promise.all([
+      fetchApplications(),
+      fetchGapTags().catch(() => ({})),
+      fetchPipelineStages().catch(() => ({ stages: [], terminal: [] })),
+    ])
+      .then(([apps, gaps, defs]) => {
         setRows(apps);
         setGapDict(gaps);
+        setStageDefs(defs);
       })
       .catch((e) => setError(e.message));
   }, []);
@@ -51,12 +81,7 @@ export default function StatsPage() {
     color: b.color,
   }));
 
-  const statusCounts = STATUS_ORDER.map((s) => ({
-    label: s.label,
-    icon: s.icon,
-    value: counted.filter((r) => (r.status || "").toLowerCase() === s.key).length,
-    color: s.color,
-  }));
+  const statusCounts = stageBreakdown(counted, stageDefs);
 
   const sourceMap = {};
   counted.forEach((r) => {
@@ -153,7 +178,7 @@ export default function StatsPage() {
 
         <div className="col-lg-4">
           <div className="card h-100">
-            <div className="card-header">Status breakdown</div>
+            <div className="card-header">Current stage</div>
             <div className="card-body">
               <BarChart items={statusCounts} valueSuffix=" apps" />
             </div>

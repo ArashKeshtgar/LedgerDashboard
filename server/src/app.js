@@ -440,18 +440,24 @@ export function createApp(cfg, deps = {}) {
     );
   }
 
+  // strict: the API then guarantees the input matches this schema. Without it
+  // the model sometimes dropped gap_tags, or put the gap_tags array inside
+  // the `gaps` string, so the row was saved with no tags. Strict mode doesn't
+  // allow minimum/maximum, so normalizeAnalysis clamps match_score instead.
   const ANALYZE_TOOL = {
     name: "submit_analysis",
     description: "Submit the match analysis for this job posting against the candidate's fact bank.",
+    strict: true,
     input_schema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         base_variant: {
           type: "string",
           enum: ["dotnet_azure", "powerplatform"],
           description: "Which base resume template fits this posting better.",
         },
-        match_score: { type: "integer", minimum: 0, maximum: 100 },
+        match_score: { type: "integer", description: "0-100." },
         recommendation: { type: "string", enum: ["apply", "apply_with_caveats", "skip"] },
         reasoning: {
           type: "string",
@@ -475,6 +481,38 @@ export function createApp(cfg, deps = {}) {
       required: ["base_variant", "match_score", "recommendation", "reasoning", "gaps", "gap_tags"],
     },
   };
+
+  // Accepts an array or a comma-joined string and returns clean kebab-case
+  // slugs. The build endpoint gets gap_tags from the client in either shape.
+  function toGapTagList(value) {
+    const items = Array.isArray(value) ? value : String(value || "").split(",");
+    const slug = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return [...new Set(items.map(slug).filter(Boolean))];
+  }
+
+  // Last check even under strict mode: a truncated or refused response can
+  // still come back incomplete, and it should fail loudly instead of saving
+  // a draft row with no gap tags.
+  function normalizeAnalysis(message) {
+    if (message.stop_reason === "max_tokens") {
+      throw new Error("Analysis was cut off (max_tokens) — nothing was saved, try again");
+    }
+    const toolUse = message.content.find((b) => b.type === "tool_use");
+    if (!toolUse) throw new Error("Model did not return a structured analysis");
+    const a = toolUse.input;
+    const gaps = Array.isArray(a.gaps) ? a.gaps : [];
+    const gap_tags = toGapTagList(a.gap_tags);
+    if (gaps.length > 0 && gap_tags.length === 0) {
+      throw new Error("Analysis listed gaps but no gap_tags — nothing was saved, try again");
+    }
+    const score = Math.round(Number(a.match_score));
+    return {
+      ...a,
+      match_score: Number.isFinite(score) ? Math.min(100, Math.max(0, score)) : 0,
+      gaps,
+      gap_tags,
+    };
+  }
 
   // POST /api/packages/analyze - stage 1 (light). This is the ONLY place a
   // draft row/folder gets created for the AI-package flow — build fills that
@@ -503,7 +541,7 @@ export function createApp(cfg, deps = {}) {
       const client = anthropicClient();
       const message = await client.messages.create({
         model: "claude-sonnet-5",
-        max_tokens: 1024,
+        max_tokens: 4096,
         system:
           "You are scoring how well a job posting matches a candidate, using ONLY the facts " +
           "listed below — never invent experience, numbers or skills not in this list. " +
@@ -517,15 +555,13 @@ export function createApp(cfg, deps = {}) {
         tool_choice: { type: "tool", name: "submit_analysis" },
       });
 
-      const toolUse = message.content.find((b) => b.type === "tool_use");
-      if (!toolUse) throw new Error("Model did not return a structured analysis");
-      const analysis = toolUse.input;
+      const analysis = normalizeAnalysis(message);
 
       const folder = await createApplicationRow({
         company, role, location, source, posting_url,
         match_score: analysis.match_score,
         variant: analysis.base_variant,
-        gap_tags: (analysis.gap_tags || []).join(","),
+        gap_tags: analysis.gap_tags.join(","),
       });
       writeFileSync(path.join(APPLICATIONS_DIR, folder, "posting.txt"), postingText, "utf-8");
       const createdRow = await withPipelineFor(folder);
@@ -732,7 +768,7 @@ export function createApp(cfg, deps = {}) {
       await updateApplicationRowByFolder(folder, {
         variant: base_variant,
         match_score: match_score ?? "",
-        gap_tags: (gap_tags || []).join(","),
+        gap_tags: toGapTagList(gap_tags).join(","),
       });
 
       const updated = await withPipelineFor(folder);

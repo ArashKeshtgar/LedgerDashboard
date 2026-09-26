@@ -158,6 +158,39 @@ describe("resume engine", () => {
       .toBe("We need SQL.");
   });
 
+  it("analyze sends a strict tool and cleans gap_tags before saving", async () => {
+    const anthropic = fakeAnthropic(() => ({
+      base_variant: "dotnet_azure", match_score: 140, recommendation: "apply",
+      reasoning: "Good fit.", gaps: ["No SSIS", "No Redis"], gap_tags: ["ETL SSIS", "caching-redis", "etl-ssis"],
+    }));
+    server = await start(testConfig(data.root), { anthropic });
+
+    const res = await server.call("POST", "/api/packages/analyze", {
+      body: { company: "Initech", role: "SQL Developer", postingText: "We need SQL." },
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(anthropic.calls[0].tools[0].strict).toBe(true);
+    expect(body.match_score).toBe(100);
+    const row = await (await server.call("GET", `/api/applications/${body.folder}`)).json();
+    expect(row.gap_tags).toBe("etl-ssis,caching-redis");
+  });
+
+  it("analyze saves nothing when the model lists gaps but no gap_tags", async () => {
+    const anthropic = fakeAnthropic(() => ({
+      base_variant: "dotnet_azure", match_score: 58, recommendation: "skip",
+      reasoning: "Weak.", gaps: ["No DBA ownership"], gap_tags: [],
+    }));
+    server = await start(testConfig(data.root), { anthropic });
+    const before = (await (await server.call("GET", "/api/applications")).json()).length;
+
+    const res = await server.call("POST", "/api/packages/analyze", {
+      body: { company: "Initech", role: "DBA", postingText: "We need a DBA." },
+    });
+    expect(res.status).toBe(500);
+    expect((await (await server.call("GET", "/api/applications")).json()).length).toBe(before);
+  });
+
   it("build refuses a folder outside applications/ before calling the model", async () => {
     const anthropic = fakeAnthropic(() => packageInput);
     server = await start(testConfig(data.root), { anthropic });

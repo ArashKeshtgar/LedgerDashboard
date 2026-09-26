@@ -177,6 +177,8 @@ export default function ApplicationDetail() {
   const [deciding, setDeciding] = useState(null); // null | "apply" | "apply_with_caveats" | "skip"
   const [decisionError, setDecisionError] = useState(null);
   const [decisionErrorDetails, setDecisionErrorDetails] = useState(null);
+  const [justBuilt, setJustBuilt] = useState(false);
+  const [showRebuild, setShowRebuild] = useState(false);
   const [followupPending, setFollowupPending] = useState(false);
   const [followupError, setFollowupError] = useState(null);
   const [editingField, setEditingField] = useState(null);
@@ -247,6 +249,7 @@ export default function ApplicationDetail() {
     }
     setDecisionError(null);
     setDecisionErrorDetails(null);
+    setJustBuilt(false);
     setDeciding(decision);
     try {
       await buildPackage({
@@ -256,7 +259,9 @@ export default function ApplicationDetail() {
         postingText: app.postingText,
         base_variant: app.variant,
         match_score: app.match_score,
-        gaps: (app.gap_tags || "").split(",").filter(Boolean),
+        // The field the server reads. This used to be sent as `gaps`, so the
+        // server saw no gap_tags and wiped the ones /analyze had saved.
+        gap_tags: (app.gap_tags || "").split(",").filter(Boolean),
         caveats: decision === "apply_with_caveats",
       });
       // Building fills in the SAME draft row/folder, it never creates a new
@@ -266,6 +271,8 @@ export default function ApplicationDetail() {
       // Re-fetch in place instead so the new files/fields actually show up.
       const refreshed = await fetchApplication(id);
       setApp(refreshed);
+      setJustBuilt(true);
+      setShowRebuild(false);
     } catch (e) {
       setDecisionError(e.message);
       setDecisionErrorDetails(e.details || null);
@@ -339,6 +346,13 @@ export default function ApplicationDetail() {
     }
   }
 
+  // A built package leaves résumé files in the folder. Building doesn't
+  // move the stage (a draft only counts once you've actually sent it), so
+  // without this the page kept offering "Apply — build" again after a
+  // successful build, with no way to mark it sent here.
+  const packageBuilt = (app.files || []).some((f) => /Resume\.(docx|pdf)$/i.test(f));
+  const offerBuild = !packageBuilt || showRebuild;
+
   const waitingKeys = new Set((stages.stages || []).filter((s) => s.waiting).map((s) => s.key));
   const canFollowup = waitingKeys.has(app.stage);
   const stageLabels = new Map(
@@ -364,8 +378,9 @@ export default function ApplicationDetail() {
         <div className="alert alert-warning mb-3">
           <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span>
-              📝 This package hasn't been sent yet — it won't show up on the Pipeline or count in
-              Stats until you decide. Nothing gets built until you say so.
+              {packageBuilt
+                ? "📦 The package is built but not sent yet — review the files below, send the application, then mark it as sent. Until then it won't show up on the Pipeline or count in Stats."
+                : "📝 This package hasn't been sent yet — it won't show up on the Pipeline or count in Stats until you decide. Nothing gets built until you say so."}
             </span>
             <button
               type="button"
@@ -419,6 +434,38 @@ export default function ApplicationDetail() {
             </div>
           )}
 
+          {justBuilt && (
+            <div className="alert alert-success py-2 px-3 mt-2 mb-0" role="status">
+              ✅ Package built — résumé, cover letter, match report and interview questions are
+              ready below.
+            </div>
+          )}
+
+          {!offerBuild && (
+            <div className="d-flex flex-wrap gap-2 mt-3 pt-3 border-top">
+              <button
+                type="button"
+                className="btn btn-sm btn-success rounded-pill"
+                disabled={approving || deleting}
+                onClick={handleApprove}
+              >
+                {approving ? "Approving…" : "📤 Approve & Apply — mark as sent"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary rounded-pill"
+                disabled={approving || deleting}
+                onClick={() => {
+                  setShowRebuild(true);
+                  setJustBuilt(false);
+                }}
+              >
+                🔁 Rebuild the package
+              </button>
+            </div>
+          )}
+
+          {offerBuild && (
           <div className="d-flex flex-wrap gap-2 mt-3 pt-3 border-top">
             <button
               type="button"
@@ -444,7 +491,18 @@ export default function ApplicationDetail() {
             >
               {deciding === "skip" ? "Removing…" : "⛔ Skip"}
             </button>
+            {showRebuild && (
+              <button
+                type="button"
+                className="btn btn-sm btn-link"
+                disabled={!!deciding}
+                onClick={() => setShowRebuild(false)}
+              >
+                Cancel rebuild
+              </button>
+            )}
           </div>
+          )}
           {(deciding === "apply" || deciding === "apply_with_caveats") && (
             <div className="text-muted small mt-2">
               Writing the résumé, cover letter, match report and interview questions — this can

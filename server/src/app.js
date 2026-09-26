@@ -764,12 +764,18 @@ export function createApp(cfg, deps = {}) {
       writeFileSync(path.join(folderPath, "CoverLetter.md"), generated.cover_letter_markdown, "utf-8");
 
       // Refresh the row with the heavier call's numbers (analyze's were an
-      // early estimate) — folder/status/etc. are untouched.
-      await updateApplicationRowByFolder(folder, {
-        variant: base_variant,
-        match_score: match_score ?? "",
-        gap_tags: toGapTagList(gap_tags).join(","),
-      });
+      // early estimate) — folder/status/etc. are untouched. Only fields the
+      // caller actually sent are overwritten: a build started from the
+      // detail page used to omit gap_tags, and "missing" was written as
+      // "empty", wiping the tags /analyze had saved.
+      const refreshedFields = { variant: base_variant };
+      if (match_score !== undefined && match_score !== null && match_score !== "") {
+        refreshedFields.match_score = match_score;
+      }
+      if (gap_tags !== undefined && gap_tags !== null) {
+        refreshedFields.gap_tags = toGapTagList(gap_tags).join(",");
+      }
+      await updateApplicationRowByFolder(folder, refreshedFields);
 
       const updated = await withPipelineFor(folder);
       res.status(201).json(updated);

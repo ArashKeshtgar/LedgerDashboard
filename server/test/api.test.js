@@ -221,6 +221,26 @@ describe("resume engine", () => {
     expect(readdirSync(data.engine).filter((f) => f.startsWith(".tmp-plan"))).toEqual([]);
   });
 
+  it("build keeps the saved gap tags and score when the request doesn't send them", async () => {
+    // The detail page used to send `gaps` instead of `gap_tags`; the server
+    // treated "missing" as "empty" and wiped the tags /analyze had saved.
+    const anthropic = fakeAnthropic(() => packageInput);
+    server = await start(testConfig(data.root), { anthropic });
+    await server.call("PATCH", `/api/applications/${FOLDER_A}`, { body: { gap_tags: "etl-ssis,power-bi" } });
+
+    const res = await server.call("POST", "/api/packages/build", {
+      body: {
+        folder: FOLDER_A, company: "Acme", role: "Backend Developer",
+        postingText: "posting", base_variant: "powerplatform",
+      },
+    });
+    const row = await res.json();
+    expect(res.status).toBe(201);
+    expect(row.gap_tags).toBe("etl-ssis,power-bi");
+    expect(row.match_score).toBe("70");
+    expect(row.variant).toBe("powerplatform");
+  });
+
   it("keeps serving other requests while a build runs, and refuses a second build of the same folder", async () => {
     let release;
     const gate = new Promise((r) => (release = r));

@@ -9,6 +9,23 @@ on:
 jobs:
   server:
     runs-on: ubuntu-latest
+    # A throwaway SQL Server, so the suite also runs against the SQL store
+    # (each test run creates and drops its own database in it).
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: Ci-only_Throwaway1!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Ci-only_Throwaway1!' -Q 'SELECT 1' -b -o /dev/null"
+          --health-interval 5s --health-timeout 5s --health-retries 30 --health-start-period 20s
+    env:
+      TEST_SQL_SERVER: localhost
+      TEST_SQL_USER: sa
+      TEST_SQL_PASSWORD: Ci-only_Throwaway1!
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -45,6 +45,13 @@ export function loadConfig(env = process.env) {
     }
   }
 
+  // Data store: the CSV files (default) or SQL Server. See stores/index.js.
+  const store = (env.STORE || "csv").toLowerCase();
+  if (store !== "csv" && store !== "sql") throw new Error(`STORE must be "csv" or "sql", not "${env.STORE}".`);
+  if (store === "sql" && !env.DB_PASSWORD) {
+    throw new Error("STORE=sql needs DB_PASSWORD (the ledger_svc login, see db/02-service-login.sql).");
+  }
+
   const extraOrigins = (env.CORS_ORIGINS || "")
     .split(",")
     .map((o) => o.trim())
@@ -64,6 +71,17 @@ export function loadConfig(env = process.env) {
     jobsearchDir: env.JOBSEARCH_DATA_DIR || path.resolve(__dirname, "../../../JobSearch"),
     clientDist: path.resolve(__dirname, "../../client/dist"),
     motivationPath: path.resolve(__dirname, "../../motivation.yml"),
+    store,
+    db: {
+      server: env.DB_SERVER || "localhost",
+      port: Number(env.DB_PORT) || 1433,
+      database: env.DB_NAME || "LedgerDashboard",
+      user: env.DB_USER || "ledger_svc",
+      password: env.DB_PASSWORD || null,
+      // true for a local SQL Server with its self-signed certificate; set
+      // DB_TRUST_SERVER_CERT=false for a hosted database (e.g. Azure SQL).
+      trustServerCertificate: (env.DB_TRUST_SERVER_CERT || "true") !== "false",
+    },
     anthropicApiKey: env.ANTHROPIC_API_KEY || null,
     python: env.PYTHON || null,
   };

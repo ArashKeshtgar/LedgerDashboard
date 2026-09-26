@@ -2,46 +2,34 @@ import express from "express";
 import cookieSession from "cookie-session";
 import { load as loadYaml } from "js-yaml";
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync, unlinkSync, rmSync } from "fs";
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import path from "path";
 import Anthropic from "@anthropic-ai/sdk";
-import { readCsv, toCsv, writeFileAtomic, appendLine, csvField, FileLockedError } from "./csv.js";
+import { FileLockedError } from "./csv.js";
 import { isSafeFolderName, resolveApplicationFolder, UnsafeFolderError } from "./paths.js";
 import { attachPipeline, FOLLOWUP_KEY } from "./pipeline.js";
 import { passwordMatches, createLoginLimiter, originGuard } from "./security.js";
 import { runProcess, findPython } from "./process.js";
 import { slugify, todayISO, weekStartISO, ISO_DATE_RE } from "./text.js";
-
-const LEDGER_COLUMNS = [
-  "date", "company", "role", "branch", "source", "source_detail", "poster_type",
-  "poster_name", "end_client", "applied_via", "posting_url", "date_posted",
-  "date_seen", "location", "match_score", "variant", "folder", "status",
-  "last_contact", "next_action", "outcome", "notes", "gap_tags",
-];
-
-const RECRUITER_COLUMNS = [
-  "name", "title", "company", "linkedin_url", "source", "date_added",
-  "connect_note", "connect_sent", "connect_accepted",
-  "followup_note", "followup_sent", "replied", "notes",
-];
+import { RECRUITER_DATE_FIELDS } from "./stores/shape.js";
+import { isStoreValidationError } from "./stores/sqlStore.js";
 
 const VALIDATE_TIMEOUT_MS = 30_000;
 // LibreOffice's docx -> pdf conversion is the slow part of a build.
 const BUILD_TIMEOUT_MS = 180_000;
 
 // Builds the Express app from an already-validated config (see config.js).
-// Everything that touches disk goes through the paths derived here, so tests
-// can point a whole app at a temporary copy of the data. `deps.anthropic`
-// lets tests swap the Claude client for a fake.
+// `deps.store` is the data store (stores/index.js — CSV files or SQL Server,
+// same interface); application folders, the fact bank and the engine
+// scripts are always files under cfg.jobsearchDir. `deps.anthropic` lets
+// tests swap the Claude client for a fake.
 export function createApp(cfg, deps = {}) {
+  const store = deps.store;
+  if (!store) throw new Error("createApp needs deps.store (see stores/index.js)");
   const JOBSEARCH_DIR = cfg.jobsearchDir;
   const ENGINE_DIR = path.join(JOBSEARCH_DIR, "engine");
-  const LEDGER_PATH = path.join(ENGINE_DIR, "ledger.csv");
   const APPLICATIONS_DIR = path.join(ENGINE_DIR, "applications");
   const GAP_TAGS_PATH = path.join(ENGINE_DIR, "gap_tags.yml");
-  const PIPELINE_PATH = path.join(ENGINE_DIR, "pipeline.csv");
-  const STAGES_PATH = path.join(ENGINE_DIR, "pipeline_stages.yml");
-  const RECRUITERS_PATH = path.join(ENGINE_DIR, "target_list.csv");
   const FACTS_DIR = path.join(ENGINE_DIR, "facts");
   const COMPANIES_PATH = path.join(ENGINE_DIR, "companies.yml");
 
@@ -60,6 +48,8 @@ export function createApp(cfg, deps = {}) {
   function sendError(res, err) {
     if (err instanceof FileLockedError) return res.status(423).json({ error: err.message });
     if (err instanceof UnsafeFolderError) return res.status(400).json({ error: err.message });
+    // A value the database refused (bad date, too long, duplicate, constraint).
+    if (isStoreValidationError(err)) return res.status(400).json({ error: `Invalid value: ${err.message}` });
     console.error(err);
     res.status(500).json({ error: cfg.production ? "Internal server error" : err.message });
   }
@@ -132,55 +122,19 @@ export function createApp(cfg, deps = {}) {
     return facts;
   }
 
-  // A row's id is its folder — stable across edits, deletes and hand edits
-  // of ledger.csv, unlike the old array index, which pointed at a different
-  // row (and folder) as soon as any earlier row was added or removed.
-  function loadLedger() {
-    return readCsv(LEDGER_PATH).map((r) => ({ id: r.folder, ...r }));
-  }
-
-  // Rewrites ledger.csv wholesale (small file, needed for edits/new rows,
-  // unlike stage moves which only ever append) — atomically, via a temp
-  // file and rename. Every read-modify-write below is synchronous, so two
-  // requests in this process can't interleave between the read and the write.
-  function writeLedger(rows) {
-    writeFileAtomic(LEDGER_PATH, toCsv(LEDGER_COLUMNS, rows.map(({ id, ...r }) => r)));
-  }
-
-  function findLedgerRow(folder) {
+  async function findLedgerRow(folder) {
     if (!isSafeFolderName(folder)) return null;
-    return loadLedger().find((r) => r.folder === folder) || null;
+    return store.getApplication(folder);
   }
 
-  function loadStages() {
-    if (!existsSync(STAGES_PATH)) return { stages: [], terminal: [], actions: [] };
-    const doc = loadYaml(readFileSync(STAGES_PATH, "utf-8")) || {};
-    return { stages: doc.stages || [], terminal: doc.terminal || [], actions: doc.actions || [] };
+  async function withPipeline(rows) {
+    const [events, stages] = await Promise.all([store.listEvents(), store.loadStages()]);
+    return attachPipeline(rows, events, stages);
   }
 
-  function loadPipelineEvents() {
-    if (!existsSync(PIPELINE_PATH)) return [];
-    return readCsv(PIPELINE_PATH).filter((e) => e.folder && e.stage);
-  }
-
-  function withPipeline(rows) {
-    return attachPipeline(rows, loadPipelineEvents(), loadStages());
-  }
-
-  function withPipelineFor(folder) {
-    return withPipeline(loadLedger()).find((r) => r.folder === folder);
-  }
-
-  // Appends one event line to pipeline.csv. The file is append-only — the last
-  // line for a folder is its current stage — so moving a card is just a new line.
-  // `date` defaults to today but can be overridden (e.g. logging a stage change
-  // that actually happened a few days ago, or a future booked interview date).
-  function appendPipelineEvent({ folder, company, stage, note, date }) {
-    const raw = existsSync(PIPELINE_PATH) ? readFileSync(PIPELINE_PATH, "utf-8") : "";
-    const needsNewline = raw.length > 0 && !raw.endsWith("\n");
-    const eventDate = date && ISO_DATE_RE.test(date) ? date : todayISO();
-    const line = [folder, company, stage, eventDate, note || ""].map(csvField).join(",");
-    appendLine(PIPELINE_PATH, (needsNewline ? "\n" : "") + line + "\n");
+  async function withPipelineFor(folder) {
+    const row = await store.getApplication(folder);
+    return row ? (await withPipeline([row]))[0] : null;
   }
 
   // GET /api/motivation - one line, picked by the date so it holds for the
@@ -205,9 +159,9 @@ export function createApp(cfg, deps = {}) {
   });
 
   // GET /api/pipeline-stages - the stage definitions (ordered) + terminal states
-  app.get("/api/pipeline-stages", (req, res) => {
+  app.get("/api/pipeline-stages", async (req, res) => {
     try {
-      res.json(loadStages());
+      res.json(await store.loadStages());
     } catch (err) {
       sendError(res, err);
     }
@@ -215,7 +169,7 @@ export function createApp(cfg, deps = {}) {
 
   // POST /api/pipeline-events - move an application to a new stage (drag & drop
   // on the Pipeline board). Body: { folder, stage, note?, date? }
-  app.post("/api/pipeline-events", (req, res) => {
+  app.post("/api/pipeline-events", async (req, res) => {
     try {
       const { folder, stage, note, date } = req.body || {};
       if (!folder || !stage) {
@@ -225,17 +179,17 @@ export function createApp(cfg, deps = {}) {
         return res.status(400).json({ error: "date must be YYYY-MM-DD, optionally with THH:mm" });
       }
 
-      const { stages, terminal } = loadStages();
+      const { stages, terminal } = await store.loadStages();
       const validKeys = new Set([...stages, ...terminal].map((s) => s.key));
       if (!validKeys.has(stage)) {
         return res.status(400).json({ error: `Unknown stage: ${stage}` });
       }
 
-      const ledgerRow = findLedgerRow(folder);
+      const ledgerRow = await findLedgerRow(folder);
       if (!ledgerRow) return res.status(404).json({ error: `Unknown folder: ${folder}` });
 
-      appendPipelineEvent({ folder, company: ledgerRow.company, stage, note, date });
-      res.json(withPipelineFor(folder));
+      await store.appendEvent({ folder, stage, note, date });
+      res.json(await withPipelineFor(folder));
     } catch (err) {
       sendError(res, err);
     }
@@ -243,21 +197,16 @@ export function createApp(cfg, deps = {}) {
 
   // POST /api/pipeline-events/followup - log that a follow-up was sent, without
   // moving the card to a new stage. Body: { folder, note? }
-  app.post("/api/pipeline-events/followup", (req, res) => {
+  app.post("/api/pipeline-events/followup", async (req, res) => {
     try {
       const { folder, note } = req.body || {};
       if (!folder) return res.status(400).json({ error: "folder is required" });
 
-      const ledgerRow = findLedgerRow(folder);
+      const ledgerRow = await findLedgerRow(folder);
       if (!ledgerRow) return res.status(404).json({ error: `Unknown folder: ${folder}` });
 
-      appendPipelineEvent({
-        folder,
-        company: ledgerRow.company,
-        stage: FOLLOWUP_KEY,
-        note: note || "Follow-up sent",
-      });
-      res.json(withPipelineFor(folder));
+      await store.appendEvent({ folder, stage: FOLLOWUP_KEY, note: note || "Follow-up sent" });
+      res.json(await withPipelineFor(folder));
     } catch (err) {
       sendError(res, err);
     }
@@ -266,10 +215,10 @@ export function createApp(cfg, deps = {}) {
   // Shared by POST /api/applications (manual entry) and POST /api/packages/analyze
   // (engine-built entry) — both start life in "draft" and create the same
   // folder/ledger-row/pipeline-event shape.
-  function createApplicationRow({
+  async function createApplicationRow({
     company, role, location, branch, source, posting_url, match_score, notes, variant, gap_tags,
   }) {
-    const rows = loadLedger();
+    const rows = await store.listApplications();
     const date = todayISO();
     const base = `${date}__${slugify(company) || "Company"}__${slugify(role) || "Role"}`;
     const existingFolders = new Set(rows.map((r) => r.folder));
@@ -289,27 +238,22 @@ export function createApp(cfg, deps = {}) {
       outcome: "", notes: notes || "", gap_tags: gap_tags || "",
     };
 
-    writeLedger([...rows, newRow]);
+    await store.createApplication(newRow);
     mkdirSync(folderPath, { recursive: true });
-    appendPipelineEvent({ folder, company, stage: "draft", note: "" });
 
     return folder;
   }
 
   // Updates ledger fields on an already-existing row, found by folder.
-  function updateApplicationRowByFolder(folder, fields) {
-    const rows = loadLedger();
-    const idx = rows.findIndex((r) => r.folder === folder);
-    if (idx === -1) throw new Error(`Unknown folder: ${folder}`);
-    rows[idx] = { ...rows[idx], ...fields };
-    writeLedger(rows);
+  async function updateApplicationRowByFolder(folder, fields) {
+    if (!(await store.updateApplication(folder, fields))) throw new Error(`Unknown folder: ${folder}`);
   }
 
   // POST /api/applications - add a new application (starts life in "draft",
   // same as one built by hand) so a new posting can be tracked without
   // touching ledger.csv directly. Body: { company, role, location?, branch?,
   // source?, posting_url?, match_score?, notes? }
-  app.post("/api/applications", (req, res) => {
+  app.post("/api/applications", async (req, res) => {
     try {
       const { company, role, location, branch, source, posting_url, match_score, notes } =
         req.body || {};
@@ -317,10 +261,10 @@ export function createApp(cfg, deps = {}) {
         return res.status(400).json({ error: "company and role are required" });
       }
 
-      const folder = createApplicationRow({
+      const folder = await createApplicationRow({
         company, role, location, branch, source, posting_url, match_score, notes,
       });
-      res.status(201).json(withPipelineFor(folder));
+      res.status(201).json(await withPipelineFor(folder));
     } catch (err) {
       sendError(res, err);
     }
@@ -330,12 +274,10 @@ export function createApp(cfg, deps = {}) {
   // pipeline stage — that's POST /api/pipeline-events — and not the posting
   // facts, which come from how the package was built). :id is the folder.
   const EDITABLE_LEDGER_FIELDS = new Set(["notes", "next_action", "last_contact", "outcome", "gap_tags"]);
-  app.patch("/api/applications/:id", (req, res) => {
+  app.patch("/api/applications/:id", async (req, res) => {
     try {
       const folder = req.params.id;
-      const rows = loadLedger();
-      const idx = isSafeFolderName(folder) ? rows.findIndex((r) => r.folder === folder) : -1;
-      if (idx === -1) return res.status(404).json({ error: "Not found" });
+      if (!(await findLedgerRow(folder))) return res.status(404).json({ error: "Not found" });
 
       const updates = {};
       for (const [k, v] of Object.entries(req.body || {})) {
@@ -345,9 +287,8 @@ export function createApp(cfg, deps = {}) {
         return res.status(400).json({ error: "No editable fields in request body" });
       }
 
-      rows[idx] = { ...rows[idx], ...updates };
-      writeLedger(rows);
-      res.json(withPipelineFor(folder));
+      await store.updateApplication(folder, updates);
+      res.json(await withPipelineFor(folder));
     } catch (err) {
       sendError(res, err);
     }
@@ -357,20 +298,21 @@ export function createApp(cfg, deps = {}) {
   // Meant for undoing a draft the user never wanted (e.g. "Skip" on the
   // analyze→build gate) — not a general archive feature. The folder path is
   // resolved strictly inside applications/ (an empty or odd folder value is
-  // refused, never turned into "delete applications/ itself"). pipeline.csv
-  // is left alone (append-only everywhere); an orphaned event for a deleted
-  // folder is harmless since nothing looks it up once the row is gone.
-  app.delete("/api/applications/:id", (req, res) => {
+  // refused, never turned into "delete applications/ itself"). What happens
+  // to its pipeline events is up to the store: CSV leaves them in the
+  // append-only file (harmless, nothing looks them up), SQL deletes them
+  // with the row.
+  app.delete("/api/applications/:id", async (req, res) => {
     try {
       const folder = req.params.id;
-      const row = findLedgerRow(folder);
+      const row = await findLedgerRow(folder);
       if (!row) return res.status(404).json({ error: "Not found" });
       if (buildsInFlight.has(folder)) {
         return res.status(409).json({ error: "A build is running for this application" });
       }
 
       const folderPath = resolveApplicationFolder(APPLICATIONS_DIR, row.folder);
-      writeLedger(loadLedger().filter((r) => r.folder !== folder));
+      await store.deleteApplication(folder);
       if (existsSync(folderPath)) rmSync(folderPath, { recursive: true, force: true });
 
       res.json({ deleted: true, folder });
@@ -380,19 +322,19 @@ export function createApp(cfg, deps = {}) {
   });
 
   // GET /api/applications - full ledger table
-  app.get("/api/applications", (req, res) => {
+  app.get("/api/applications", async (req, res) => {
     try {
-      res.json(withPipeline(loadLedger()));
+      res.json(await withPipeline(await store.listApplications()));
     } catch (err) {
       sendError(res, err);
     }
   });
 
   // GET /api/applications/:id - one row + any files found in its folder
-  app.get("/api/applications/:id", (req, res) => {
+  app.get("/api/applications/:id", async (req, res) => {
     try {
       const folder = req.params.id;
-      const row = findLedgerRow(folder) && withPipelineFor(folder);
+      const row = (await findLedgerRow(folder)) && (await withPipelineFor(folder));
       if (!row) return res.status(404).json({ error: "Not found" });
 
       let files = [];
@@ -579,14 +521,14 @@ export function createApp(cfg, deps = {}) {
       if (!toolUse) throw new Error("Model did not return a structured analysis");
       const analysis = toolUse.input;
 
-      const folder = createApplicationRow({
+      const folder = await createApplicationRow({
         company, role, location, source, posting_url,
         match_score: analysis.match_score,
         variant: analysis.base_variant,
         gap_tags: (analysis.gap_tags || []).join(","),
       });
       writeFileSync(path.join(APPLICATIONS_DIR, folder, "posting.txt"), postingText, "utf-8");
-      const createdRow = withPipeline(loadLedger()).find((r) => r.folder === folder);
+      const createdRow = await withPipelineFor(folder);
 
       res.json({
         ...analysis,
@@ -787,13 +729,13 @@ export function createApp(cfg, deps = {}) {
 
       // Refresh the row with the heavier call's numbers (analyze's were an
       // early estimate) — folder/status/etc. are untouched.
-      updateApplicationRowByFolder(folder, {
+      await updateApplicationRowByFolder(folder, {
         variant: base_variant,
         match_score: match_score ?? "",
         gap_tags: (gap_tags || []).join(","),
       });
 
-      const updated = withPipeline(loadLedger()).find((r) => r.folder === folder);
+      const updated = await withPipelineFor(folder);
       res.status(201).json(updated);
     } catch (err) {
       sendError(res, err);
@@ -805,7 +747,7 @@ export function createApp(cfg, deps = {}) {
   // be building. The in-flight set is released however the build ends.
   app.post("/api/packages/build", async (req, res) => {
     const { folder } = req.body || {};
-    if (!isSafeFolderName(folder) || !findLedgerRow(folder)) {
+    if (!isSafeFolderName(folder) || !(await findLedgerRow(folder))) {
       return res.status(404).json({
         error: `Unknown folder: ${folder} — call /api/packages/analyze first, it creates this`,
       });
@@ -821,24 +763,7 @@ export function createApp(cfg, deps = {}) {
     }
   });
 
-  // --- Recruiter Search Engine (target_list.csv) ---------------------------
-
-  // Stable id from the LinkedIn URL (unique per person), falling back to
-  // name+company — not the row's position, which shifts when the file is
-  // edited by hand or by recruiter_batch.py.
-  function recruiterId(r) {
-    const key = r.linkedin_url || `${r.name}|${r.company}`;
-    return createHash("sha1").update(key).digest("hex").slice(0, 12);
-  }
-
-  function loadRecruiters() {
-    if (!existsSync(RECRUITERS_PATH)) return [];
-    return readCsv(RECRUITERS_PATH).map((r) => ({ id: recruiterId(r), ...r }));
-  }
-
-  function writeRecruiters(rows) {
-    writeFileAtomic(RECRUITERS_PATH, toCsv(RECRUITER_COLUMNS, rows));
-  }
+  // --- Recruiter Search Engine ---------------------------------------------
 
   function recruiterStage(r) {
     if (r.replied) return "replied";
@@ -852,16 +777,23 @@ export function createApp(cfg, deps = {}) {
     return rows.map((r) => ({ ...r, stage: recruiterStage(r) }));
   }
 
-  // GET /api/recruiters - target list + funnel counts + daily/weekly send rate
-  app.get("/api/recruiters", (req, res) => {
-    try {
-      const rows = withRecruiterMeta(loadRecruiters());
-      const today = todayISO();
-      const weekStart = weekStartISO(new Date());
+  function sendCounts(rows) {
+    const today = todayISO();
+    const weekStart = weekStartISO(new Date());
+    const sentDates = rows.map((r) => r.connect_sent).filter(Boolean);
+    return {
+      today,
+      weekStart,
+      sentToday: sentDates.filter((d) => d === today).length,
+      sentThisWeek: sentDates.filter((d) => d >= weekStart).length,
+    };
+  }
 
-      const sentDates = rows.map((r) => r.connect_sent).filter(Boolean);
-      const sentToday = sentDates.filter((d) => d === today).length;
-      const sentThisWeek = sentDates.filter((d) => d >= weekStart).length;
+  // GET /api/recruiters - target list + funnel counts + daily/weekly send rate
+  app.get("/api/recruiters", async (req, res) => {
+    try {
+      const rows = withRecruiterMeta(await store.listRecruiters());
+      const { sentToday, sentThisWeek, weekStart } = sendCounts(rows);
 
       const funnel = {
         added: rows.length,
@@ -882,36 +814,64 @@ export function createApp(cfg, deps = {}) {
     }
   });
 
+  // POST /api/recruiters - add a batch of recruiters (used by
+  // JobSearch/engine/recruiter_batch.py). Rows whose LinkedIn URL is already
+  // on the list are skipped, not duplicated. Body: { rows: [{ name, title,
+  // company, linkedin_url, source?, connect_note?, followup_note?, notes? }] }
+  app.post("/api/recruiters", async (req, res) => {
+    try {
+      const input = Array.isArray(req.body?.rows) ? req.body.rows : null;
+      if (!input || input.length === 0) return res.status(400).json({ error: "rows[] is required" });
+      if (input.some((r) => !r || !String(r.name || "").trim())) {
+        return res.status(400).json({ error: "every row needs a name" });
+      }
+
+      const today = todayISO();
+      const rows = input.map((r) => ({
+        name: String(r.name).trim(),
+        title: String(r.title || "").trim(),
+        company: String(r.company || "").trim(),
+        linkedin_url: String(r.linkedin_url || "").trim(),
+        source: String(r.source || "batch").trim(),
+        date_added: today,
+        connect_note: String(r.connect_note || ""),
+        connect_sent: "",
+        connect_accepted: "",
+        followup_note: String(r.followup_note || ""),
+        followup_sent: "",
+        replied: "",
+        notes: String(r.notes || ""),
+      }));
+
+      const { added, skipped } = await store.addRecruiters(rows);
+      res.status(201).json({ added: added.length, skipped: skipped.map((r) => r.linkedin_url || r.name) });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
   // POST /api/recruiters/:id - mark a stage field with today's date, or clear it
   // Body: { field: "connect_sent"|"connect_accepted"|"followup_sent"|"replied", value?: boolean }
-  app.post("/api/recruiters/:id", (req, res) => {
+  app.post("/api/recruiters/:id", async (req, res) => {
     try {
       const { field, value = true } = req.body || {};
-      const allowed = new Set(["connect_sent", "connect_accepted", "followup_sent", "replied"]);
-      if (!allowed.has(field)) {
+      if (!RECRUITER_DATE_FIELDS.has(field)) {
         return res.status(400).json({ error: `Unknown field: ${field}` });
       }
-      const rows = loadRecruiters();
-      const idx = rows.findIndex((r) => r.id === req.params.id);
-      if (idx === -1) return res.status(404).json({ error: "Not found" });
 
       // A day-5 guardrail: warn (not block) if this send would blow past the
       // self-imposed daily/weekly rhythm.
       let warning = null;
       if (field === "connect_sent" && value) {
-        const today = todayISO();
-        const weekStart = weekStartISO(new Date());
-        const sentDates = rows.map((r) => r.connect_sent).filter(Boolean);
-        const sentToday = sentDates.filter((d) => d === today).length;
-        const sentThisWeek = sentDates.filter((d) => d >= weekStart).length;
+        const { sentToday, sentThisWeek } = sendCounts(await store.listRecruiters());
         if (sentToday >= 5) warning = `Already ${sentToday} sent today — daily target is 5.`;
         else if (sentThisWeek >= 25) warning = `Already ${sentThisWeek} sent this week — weekly target is 25.`;
       }
 
-      rows[idx][field] = value ? todayISO() : "";
-      writeRecruiters(rows);
+      const updated = await store.setRecruiterDate(req.params.id, field, value ? todayISO() : null);
+      if (!updated) return res.status(404).json({ error: "Not found" });
 
-      res.json({ ...withRecruiterMeta([rows[idx]])[0], warning });
+      res.json({ ...withRecruiterMeta([updated])[0], warning });
     } catch (err) {
       sendError(res, err);
     }

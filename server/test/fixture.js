@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { createApp } from "../src/app.js";
+import { createCsvStore } from "../src/stores/csvStore.js";
 
 export const FOLDER_A = "2026-09-01__Acme__Backend-Developer";
 export const FOLDER_B = "2026-09-02__Globex__Data-Engineer";
@@ -74,9 +75,11 @@ export function testConfig(root, overrides = {}) {
   };
 }
 
-// Starts the real app on an ephemeral port; returns a fetch helper.
-export async function startApp(cfg, deps) {
-  const app = createApp(cfg, deps);
+// Starts the real app on an ephemeral port; returns a fetch helper. Uses
+// the CSV store over the temp data unless deps.store is given.
+export async function startApp(cfg, deps = {}) {
+  const store = deps.store ?? createCsvStore(path.join(cfg.jobsearchDir, "engine"));
+  const app = createApp(cfg, { ...deps, store });
   const server = await new Promise((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));
   });

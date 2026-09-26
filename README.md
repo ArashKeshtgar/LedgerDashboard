@@ -86,16 +86,33 @@ The server suite runs the real Express app against a temporary copy of the data 
 
 `motivation.yml` (in this folder) holds the daily line at the top of every page. One quote is picked per day, by date, so it stays put until midnight.
 
-### Recording a stage by hand
+## SQL Server store (`STORE=sql`)
 
-`pipeline.csv` is append-only: the **last** line for a folder is its current stage, so you never edit old rows:
+With `STORE=sql` in `server/.env`, applications, pipeline events, stages and recruiters live in SQL Server (`db/03-schema.sql`). The fact bank, `companies.yml`, `gap_tags.yml` and the application folders stay as files: they are hand-curated or binary.
 
+```bash
+sqlcmd -S . -E -b -i db/01-database.sql
+sqlcmd -S . -E -b -d LedgerDashboard -i db/03-schema.sql
+sqlcmd -S . -E -b -i db/02-service-login.sql -v DB_PASSWORD="<password>"
+# put DB_PASSWORD (and STORE=sql) in server/.env, then:
+cd server
+npm run migrate:sql              # copy CSV -> SQL in one transaction, then verify
+npm run migrate:sql -- --verify  # compare only
+npm run export:csv               # SQL -> CSV snapshot in engine/sql-export/<time>/
 ```
-folder,company,stage,date,note
-2026-09-13__TELUS-Health__Intermediate-Backend-Developer,TELUS Health,technical_interview,2026-09-25,with two backend engineers
+
+The migration never modifies the CSV files; they remain as the backup. It skips pipeline events whose application is no longer in the ledger and removes repeated gap-tag slugs, and lists both. The verification then compares every field, event, stage, recruiter and the computed pipeline view. To go back, remove `STORE=sql` and restart.
+
+**Once on SQL, editing the CSV files has no effect.** Record stages from the UI or the API:
+
+```bash
+curl -X POST http://127.0.0.1:4310/api/pipeline-events -H "Content-Type: application/json" \
+  -d '{"folder":"2026-09-13__TELUS-Health__Intermediate-Backend-Developer","stage":"technical_interview","date":"2026-09-25","note":"with two backend engineers"}'
 ```
 
-`stage` must be a key from `pipeline_stages.yml`. A future `date` shows as a booked event. Dates are read as local calendar dates.
+`JobSearch/engine/recruiter_batch.py` also goes through the API (`POST /api/recruiters`), so it works with either store while the dashboard is running.
+
+SQL tests run when `server/.env.test` sets `TEST_SQL_SERVER`, `TEST_SQL_USER` and `TEST_SQL_PASSWORD` for a login that can create databases. Each run creates and drops its own database. CI uses a SQL Server service container.
 
 ## Structure
 

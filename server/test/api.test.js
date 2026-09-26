@@ -1,13 +1,39 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import path from "path";
 import { FOLDER_A, FOLDER_B, fakeAnthropic, makeDataDir, startApp, testConfig } from "./fixture.js";
+import { createCsvStore } from "../src/stores/csvStore.js";
+import { createSqlStore } from "../src/stores/sqlStore.js";
+import { migrateCsvToSql } from "../src/stores/migrate.js";
+import { createTestDatabase, sqlAvailable } from "./sqlTestDb.js";
 
+// The whole API suite runs once per store: the CSV files, and (when a SQL
+// Server is configured) a throwaway SQL database seeded from the same
+// fixture through the real migration. Same requests, same expectations.
+const KINDS = sqlAvailable ? ["csv", "sql"] : ["csv"];
+
+let testDb;
+beforeAll(async () => {
+  if (sqlAvailable) testDb = await createTestDatabase();
+}, 60_000);
+afterAll(async () => {
+  await testDb?.drop();
+});
+
+describe.each(KINDS)("%s store", (kind) => {
 let data;
 let server;
+let store;
 
-beforeEach(() => {
+beforeEach(async () => {
   data = makeDataDir();
+  const csvStore = createCsvStore(data.engine);
+  if (kind === "sql") {
+    await migrateCsvToSql({ csvStore, pool: testDb.pool, replace: true });
+    store = createSqlStore(testDb.pool);
+  } else {
+    store = csvStore;
+  }
 });
 
 afterEach(async () => {
@@ -16,16 +42,12 @@ afterEach(async () => {
   data.cleanup();
 });
 
-const ledgerFolders = () =>
-  readFileSync(path.join(data.engine, "ledger.csv"), "utf-8")
-    .trim()
-    .split("\n")
-    .slice(1)
-    .map((l) => l.split(",")[16]);
+const start = (cfg, deps = {}) => startApp(cfg, { ...deps, store });
+const ledgerFolders = async () => (await store.listApplications()).map((r) => r.folder);
 
 describe("cross-origin guard", () => {
   beforeEach(async () => {
-    server = await startApp(testConfig(data.root));
+    server = await start(testConfig(data.root));
   });
 
   it("refuses a read from a foreign website", async () => {
@@ -62,7 +84,7 @@ describe("cross-origin guard", () => {
 
 describe("applications are addressed by folder, not row position", () => {
   beforeEach(async () => {
-    server = await startApp(testConfig(data.root));
+    server = await start(testConfig(data.root));
   });
 
   it("uses the folder as the id", async () => {
@@ -73,7 +95,7 @@ describe("applications are addressed by folder, not row position", () => {
   it("deletes exactly the requested row and its folder", async () => {
     const res = await server.call("DELETE", `/api/applications/${FOLDER_B}`);
     expect(res.status).toBe(200);
-    expect(ledgerFolders()).toEqual([FOLDER_A]);
+    expect(await ledgerFolders()).toEqual([FOLDER_A]);
     expect(existsSync(path.join(data.engine, "applications", FOLDER_B))).toBe(false);
     expect(existsSync(path.join(data.engine, "applications", FOLDER_A))).toBe(true);
   });
@@ -83,14 +105,14 @@ describe("applications are addressed by folder, not row position", () => {
     await server.call("DELETE", `/api/applications/${FOLDER_A}`);
     const res = await server.call("DELETE", `/api/applications/${FOLDER_B}`);
     expect(res.status).toBe(200);
-    expect(ledgerFolders()).toEqual([]);
+    expect(await ledgerFolders()).toEqual([]);
   });
 
   it("refuses traversal-shaped ids and leaves the fact bank alone", async () => {
     const res = await server.call("DELETE", `/api/applications/${encodeURIComponent("../facts")}`);
     expect(res.status).toBe(404);
     expect(existsSync(path.join(data.engine, "facts", "projects.yml"))).toBe(true);
-    expect(ledgerFolders()).toEqual([FOLDER_A, FOLDER_B]);
+    expect(await ledgerFolders()).toEqual([FOLDER_A, FOLDER_B]);
   });
 
   it("edits the requested row by folder", async () => {
@@ -103,7 +125,7 @@ describe("applications are addressed by folder, not row position", () => {
     expect(row.company).toBe("Globex");
   });
 
-  it("writes the ledger atomically without leaving temp files", async () => {
+  it.skipIf(kind !== "csv")("writes the ledger atomically without leaving temp files", async () => {
     await server.call("PATCH", `/api/applications/${FOLDER_A}`, { body: { notes: "x" } });
     expect(readdirSync(data.engine).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
@@ -124,7 +146,7 @@ describe("resume engine", () => {
       base_variant: "dotnet_azure", match_score: 81, recommendation: "apply",
       reasoning: "Good fit.", gaps: ["No SSIS"], gap_tags: ["etl-ssis"],
     }));
-    server = await startApp(testConfig(data.root), { anthropic });
+    server = await start(testConfig(data.root), { anthropic });
 
     const res = await server.call("POST", "/api/packages/analyze", {
       body: { company: "Initech", role: "SQL Developer", postingText: "We need SQL." },
@@ -138,7 +160,7 @@ describe("resume engine", () => {
 
   it("build refuses a folder outside applications/ before calling the model", async () => {
     const anthropic = fakeAnthropic(() => packageInput);
-    server = await startApp(testConfig(data.root), { anthropic });
+    server = await start(testConfig(data.root), { anthropic });
 
     for (const folder of ["../facts", "..", "", "../../engine"]) {
       const res = await server.call("POST", "/api/packages/build", {
@@ -152,7 +174,7 @@ describe("resume engine", () => {
 
   it("build runs validate + build asynchronously and fills the folder in", async () => {
     const anthropic = fakeAnthropic(() => packageInput);
-    server = await startApp(testConfig(data.root), { anthropic });
+    server = await start(testConfig(data.root), { anthropic });
 
     const res = await server.call("POST", "/api/packages/build", {
       body: {
@@ -173,7 +195,7 @@ describe("resume engine", () => {
       await gate;
       return packageInput;
     });
-    server = await startApp(testConfig(data.root), { anthropic });
+    server = await start(testConfig(data.root), { anthropic });
     const buildBody = {
       folder: FOLDER_A, company: "Acme", role: "Backend Developer",
       postingText: "posting", base_variant: "dotnet_azure",
@@ -193,7 +215,7 @@ describe("resume engine", () => {
   it("kills a hung validate step and answers 504 instead of hanging", async () => {
     writeFileSync(path.join(data.engine, "validate.py"), "setTimeout(() => {}, 60000);\n");
     const anthropic = fakeAnthropic(() => packageInput);
-    server = await startApp(testConfig(data.root, { validateTimeoutMs: 500 }), { anthropic });
+    server = await start(testConfig(data.root, { validateTimeoutMs: 500 }), { anthropic });
 
     const res = await server.call("POST", "/api/packages/build", {
       body: {
@@ -219,7 +241,7 @@ describe("password login", () => {
   const PASSWORD = "correct-horse-battery";
 
   beforeEach(async () => {
-    server = await startApp(testConfig(data.root, { password: PASSWORD, sessionSecret: SECRET }));
+    server = await start(testConfig(data.root, { password: PASSWORD, sessionSecret: SECRET }));
   });
 
   it("requires a session for the API", async () => {
@@ -247,7 +269,7 @@ describe("password login", () => {
 
 describe("recruiters", () => {
   it("uses a stable hash id instead of the row position", async () => {
-    server = await startApp(testConfig(data.root));
+    server = await start(testConfig(data.root));
     const { rows } = await (await server.call("GET", "/api/recruiters")).json();
     expect(rows[0].id).toMatch(/^[0-9a-f]{12}$/);
 
@@ -258,4 +280,5 @@ describe("recruiters", () => {
     expect((await res.json()).stage).toBe("connect_sent");
     expect((await server.call("POST", "/api/recruiters/0", { body: { field: "replied" } })).status).toBe(404);
   });
+});
 });

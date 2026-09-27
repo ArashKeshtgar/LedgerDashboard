@@ -52,6 +52,15 @@ export function loadConfig(env = process.env) {
     throw new Error("STORE=sql needs DB_PASSWORD (the ledger_svc login, see db/02-service-login.sql).");
   }
 
+  // Session cookies are Secure in production, so browsers only send them
+  // over HTTPS. A container on this machine reached at http://localhost
+  // has no TLS in front of it; COOKIE_SECURE=false is for that case only.
+  const cookieSecureSetting = (env.COOKIE_SECURE || "").toLowerCase();
+  if (cookieSecureSetting && cookieSecureSetting !== "true" && cookieSecureSetting !== "false") {
+    throw new Error(`COOKIE_SECURE must be "true" or "false", not "${env.COOKIE_SECURE}".`);
+  }
+  const secureCookies = cookieSecureSetting ? cookieSecureSetting === "true" : production;
+
   const extraOrigins = (env.CORS_ORIGINS || "")
     .split(",")
     .map((o) => o.trim())
@@ -63,6 +72,7 @@ export function loadConfig(env = process.env) {
     port: Number(env.PORT) || 4310,
     password,
     sessionSecret,
+    secureCookies,
     allowedOrigins: [...(production ? [] : DEV_ORIGINS), ...extraOrigins],
     // Locally this is always the sibling folder. In a deployed environment
     // the real JobSearch/engine data (personal résumé content, application

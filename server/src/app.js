@@ -71,7 +71,7 @@ export function createApp(cfg, deps = {}) {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         sameSite: "lax",
         httpOnly: true,
-        secure: cfg.production,
+        secure: cfg.secureCookies ?? cfg.production,
       })
     );
 

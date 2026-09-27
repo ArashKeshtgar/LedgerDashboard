@@ -61,6 +61,8 @@ docker run -p 4310:4310 \
   ledger-dashboard
 ```
 
+To run it as a container on your own machine over plain `http://localhost`, add `-e COOKIE_SECURE=false`: production cookies are otherwise HTTPS-only and the browser would never send the login back. Control Panel's `compose.apps.yml` runs it this way, bound to 127.0.0.1, as a service it can start, stop and restart.
+
 The image contains Node, Python and LibreOffice, runs as the unprivileged `node` user, and sets `NODE_ENV=production`. The job-search data is **never** baked into the image (same reason it isn't in git). Mount it at `/data/JobSearch`, and make sure that directory is writable by uid 1000.
 
 ## Tests

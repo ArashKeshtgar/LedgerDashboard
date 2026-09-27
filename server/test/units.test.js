@@ -159,6 +159,14 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ DASHBOARD_PASSWORD: "short", SESSION_SECRET: secret })).toThrow(/at least 12/);
   });
 
+  it("uses Secure cookies in production unless COOKIE_SECURE=false", () => {
+    const deployed = { NODE_ENV: "production", DASHBOARD_PASSWORD: "long-enough-pass", SESSION_SECRET: secret };
+    expect(loadConfig(deployed).secureCookies).toBe(true);
+    expect(loadConfig({ ...deployed, COOKIE_SECURE: "false" }).secureCookies).toBe(false);
+    expect(loadConfig({}).secureCookies).toBe(false);
+    expect(() => loadConfig({ ...deployed, COOKIE_SECURE: "no" })).toThrow(/COOKIE_SECURE/);
+  });
+
   it("allows the Vite dev origin only outside production", () => {
     expect(loadConfig({}).allowedOrigins).toContain("http://localhost:5173");
     expect(

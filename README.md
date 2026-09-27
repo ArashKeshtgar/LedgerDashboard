@@ -109,6 +109,8 @@ sqlcmd -S . -E -b -d LedgerDashboard -i db/04-views.sql
 sqlcmd -S . -E -b -i db/05-reader-login.sql -v READER_PASSWORD="<password>"
 ```
 
+**Reporting schema `rpt`** (`db/06-report-views.sql`): `rpt.ApplicationFacts` (one row per application with every attribute a report slices by), `rpt.PipelineEvents`, `rpt.GapTags`, `rpt.Recruiters` (no names or profile URLs), plus ready-made summaries — `ScoreBucketOutcome`, `TimeToRejection`, `OutcomeByChannel`, `WeeklyActivity` (Monday weeks), `FollowupEffect`, `GapTagTrend`, `DataQuality`. `ledger_reader` can read the whole schema.
+
 The migration never modifies the CSV files; they remain as the backup. It skips pipeline events whose application is no longer in the ledger and removes repeated gap-tag slugs, and lists both. The verification then compares every field, event, stage, recruiter and the computed pipeline view. To go back, remove `STORE=sql` and restart.
 
 **Once on SQL, editing the CSV files has no effect.** Record stages from the UI or the API:

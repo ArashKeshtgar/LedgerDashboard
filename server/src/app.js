@@ -720,7 +720,11 @@ export function createApp(cfg, deps = {}) {
           "project/role section — do not use every fact, and omit a project/role entirely if it " +
           "has no relevant facts for this posting. EXCEPTION: always include exp.ctdi.description " +
           "(the Material Handler bridge role) regardless of relevance — it explains an otherwise " +
-          "unexplained employment gap on the timeline, which matters more than topical fit here.\n\n" +
+          "unexplained employment gap on the timeline, which matters more than topical fit here. " +
+          "The same holds for EVERY employment role (exp.nmb, exp.dena, exp.tarashe, exp.eram, " +
+          "exp.sepid): never omit a role, because a missing role reads as a hole in the timeline. " +
+          "Give each at least one bullet (3-5 for the ones relevant to this posting; exactly one " +
+          "each for exp.nmb, exp.eram and exp.sepid). Only project sections may be omitted.\n\n" +
           (caveats
             ? "The candidate has real gaps for this posting — address them honestly in the " +
               "cover letter rather than hiding them.\n\n"

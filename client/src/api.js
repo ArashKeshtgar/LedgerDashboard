@@ -53,8 +53,8 @@ export async function fetchPipelineStages() {
   return res.json();
 }
 
-export async function fetchMotivation() {
-  const res = await fetch(`${API_BASE}/api/motivation`);
+export async function fetchMotivation(shift = 0) {
+  const res = await fetch(`${API_BASE}/api/motivation${shift ? `?shift=${shift}` : ""}`);
   if (!res.ok) throw new Error(`Failed to load motivation (${res.status})`);
   return res.json();
 }

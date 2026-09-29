@@ -141,6 +141,7 @@ export function createApp(cfg, deps = {}) {
 
   // GET /api/motivation - one line, picked by the date so it holds for the
   // whole day and changes at midnight (not random on every refresh).
+  // ?shift=n steps n quotes away from today's (the card's ‹ › buttons).
   app.get("/api/motivation", (req, res) => {
     try {
       if (!existsSync(cfg.motivationPath)) return res.json(null);
@@ -153,8 +154,9 @@ export function createApp(cfg, deps = {}) {
       const dayNumber = Math.floor(
         (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - EPOCH) / 86400000
       );
-      const index = ((dayNumber % quotes.length) + quotes.length) % quotes.length;
-      res.json({ ...quotes[index], index, total: quotes.length });
+      const shift = Number.parseInt(req.query.shift, 10) || 0;
+      const index = (((dayNumber + shift) % quotes.length) + quotes.length) % quotes.length;
+      res.json({ ...quotes[index], index, total: quotes.length, shift });
     } catch (err) {
       sendError(res, err);
     }

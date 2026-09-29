@@ -214,6 +214,28 @@ export function createApp(cfg, deps = {}) {
     }
   });
 
+  // POST /api/pipeline-events/undo - take back a stage marked by mistake.
+  // Body: { folder, all? } — removes the latest event, or with all:true every
+  // event after the initial draft (back to where the row started). The
+  // contact captured on "Approve & Apply" is left alone.
+  app.post("/api/pipeline-events/undo", async (req, res) => {
+    try {
+      const { folder, all } = req.body || {};
+      if (!folder) return res.status(400).json({ error: "folder is required" });
+
+      const ledgerRow = await findLedgerRow(folder);
+      if (!ledgerRow) return res.status(404).json({ error: `Unknown folder: ${folder}` });
+
+      const removed = await store.removeEvents(folder, { all: all === true });
+      if (removed.length === 0) {
+        return res.status(409).json({ error: "Nothing to undo — this application is at its first stage" });
+      }
+      res.json({ ...(await withPipelineFor(folder)), removed });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
   // Shared by POST /api/applications (manual entry) and POST /api/packages/analyze
   // (engine-built entry) — both start life in "draft" and create the same
   // folder/ledger-row/pipeline-event shape.

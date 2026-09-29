@@ -265,6 +265,23 @@ export function createSqlStore(pool) {
       await insertEvent(() => pool.request(), { folder, stage, date, note });
     },
 
+    // See csvStore.removeEvents: the application's first event never goes.
+    async removeEvents(folder, { all = false } = {}) {
+      const { recordset } = await pool.request()
+        .input("folder", sql.NVarChar(150), folder)
+        .input("all", sql.Bit, all ? 1 : 0)
+        .query(`
+          DELETE e
+          OUTPUT DELETED.StageKey AS stage, CONVERT(varchar(10), DELETED.EventDate, 23) AS [date],
+                 DELETED.Note AS note
+          FROM dbo.PipelineEvents e
+          JOIN dbo.Applications a ON a.Id = e.ApplicationId
+          WHERE a.Folder = @folder
+            AND e.Id > (SELECT MIN(Id) FROM dbo.PipelineEvents WHERE ApplicationId = a.Id)
+            AND (@all = 1 OR e.Id = (SELECT MAX(Id) FROM dbo.PipelineEvents WHERE ApplicationId = a.Id))`);
+      return recordset;
+    },
+
     // Same shape as pipeline_stages.yml: `waiting` only present when true.
     async loadStages() {
       const { recordset } = await pool.request().query(`

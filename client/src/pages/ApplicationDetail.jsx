@@ -4,6 +4,7 @@ import {
   fetchApplication,
   fetchPipelineStages,
   moveApplicationStage,
+  undoApplicationStage,
   logFollowup,
   updateApplication,
   buildPackage,
@@ -200,6 +201,8 @@ export default function ApplicationDetail() {
   const [rejectNote, setRejectNote] = useState("");
   const [rejectPending, setRejectPending] = useState(false);
   const [rejectError, setRejectError] = useState(null);
+  const [undoPending, setUndoPending] = useState(false);
+  const [undoError, setUndoError] = useState(null);
 
   useEffect(() => {
     setApp(null);
@@ -371,6 +374,23 @@ export default function ApplicationDetail() {
       setRejectError(e.message);
     } finally {
       setRejectPending(false);
+    }
+  }
+
+  async function handleUndo(all) {
+    const question = all
+      ? "Reset this application back to draft? Every stage after the draft is removed."
+      : "Undo the last stage? It is removed from the history.";
+    if (!window.confirm(question)) return;
+    setUndoError(null);
+    setUndoPending(true);
+    try {
+      const { removed, ...updated } = await undoApplicationStage(app.folder, all);
+      setApp((a) => ({ ...a, ...updated }));
+    } catch (e) {
+      setUndoError(e.message);
+    } finally {
+      setUndoPending(false);
     }
   }
 
@@ -747,6 +767,21 @@ export default function ApplicationDetail() {
                   );
                 })}
               </ul>
+            )}
+            {app.stageHistory && app.stageHistory.length > 1 && (
+              <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
+                <button type="button" className="btn btn-sm btn-outline-secondary rounded-pill"
+                  disabled={undoPending} onClick={() => handleUndo(false)}>
+                  ↩️ Undo last stage
+                </button>
+                {app.stageHistory.length > 2 && (
+                  <button type="button" className="btn btn-sm btn-outline-secondary rounded-pill"
+                    disabled={undoPending} onClick={() => handleUndo(true)}>
+                    ⏮️ Reset to draft
+                  </button>
+                )}
+                {undoError && <span className="small text-danger">{undoError}</span>}
+              </div>
             )}
 
             {canFollowup && (

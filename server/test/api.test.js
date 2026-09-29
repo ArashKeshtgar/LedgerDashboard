@@ -289,6 +289,41 @@ describe("resume engine", () => {
   });
 });
 
+describe("undoing a stage marked by mistake", () => {
+  beforeEach(async () => {
+    server = await start(testConfig(data.root));
+    for (const [folder, stage] of [[FOLDER_A, "draft"], [FOLDER_B, "draft"], [FOLDER_A, "applied"],
+      [FOLDER_B, "applied"], [FOLDER_A, "rejected"]]) {
+      await server.call("POST", "/api/pipeline-events", { body: { folder, stage } });
+    }
+  });
+
+  const undo = (body) => server.call("POST", "/api/pipeline-events/undo", { body });
+  const stagesOf = async (folder) =>
+    (await (await server.call("GET", `/api/applications/${folder}`)).json()).stageHistory.map((h) => h.stage);
+
+  it("removes only the latest event of that application", async () => {
+    const res = await undo({ folder: FOLDER_A });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.stage).toBe("applied");
+    expect(body.removed.map((e) => e.stage)).toEqual(["rejected"]);
+    expect(await stagesOf(FOLDER_A)).toEqual(["draft", "applied"]);
+    expect(await stagesOf(FOLDER_B)).toEqual(["draft", "applied"]);
+  });
+
+  it("resets to the first event with all, then has nothing left to undo", async () => {
+    expect((await (await undo({ folder: FOLDER_A, all: true })).json()).stage).toBe("draft");
+    expect(await stagesOf(FOLDER_A)).toEqual(["draft"]);
+    expect(await stagesOf(FOLDER_B)).toEqual(["draft", "applied"]);
+    expect((await undo({ folder: FOLDER_A })).status).toBe(409);
+  });
+
+  it("404s an unknown folder", async () => {
+    expect((await undo({ folder: "nope" })).status).toBe(404);
+  });
+});
+
 describe("hiring contact", () => {
   beforeEach(async () => {
     server = await start(testConfig(data.root));

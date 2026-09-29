@@ -164,3 +164,18 @@ export async function logFollowup(folder, note = "") {
   }
   return res.json();
 }
+
+// Takes back a stage marked by mistake: the latest one, or with all=true
+// everything after the initial draft.
+export async function undoApplicationStage(folder, all = false) {
+  const res = await fetch(`${API_BASE}/api/pipeline-events/undo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder, all }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Failed to undo (${res.status})`);
+  }
+  return res.json();
+}

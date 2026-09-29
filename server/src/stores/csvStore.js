@@ -16,6 +16,7 @@ export function createCsvStore(engineDir) {
   const PIPELINE_PATH = path.join(engineDir, "pipeline.csv");
   const STAGES_PATH = path.join(engineDir, "pipeline_stages.yml");
   const RECRUITERS_PATH = path.join(engineDir, "target_list.csv");
+  const PIPELINE_COLUMNS = ["folder", "company", "stage", "date", "note"];
 
   // A row's id is its folder — stable across edits, deletes and hand edits
   // of ledger.csv, unlike an array index.
@@ -92,6 +93,19 @@ export function createCsvStore(engineDir) {
     async appendEvent({ folder, stage, date, note }) {
       const row = readLedger().find((r) => r.folder === folder);
       appendEventLine({ folder, company: row?.company || "", stage, date, note });
+    },
+
+    // Undo for a stage marked by mistake: drops the folder's latest event
+    // (or, with all, every event after the first) and returns what was
+    // removed. The first event — the row's own "draft" — always stays.
+    async removeEvents(folder, { all = false } = {}) {
+      if (!existsSync(PIPELINE_PATH)) return [];
+      const events = readCsv(PIPELINE_PATH);
+      const mine = events.map((e, i) => (e.folder === folder && e.stage ? i : -1)).filter((i) => i >= 0);
+      const drop = new Set(all ? mine.slice(1) : mine.length > 1 ? [mine[mine.length - 1]] : []);
+      if (drop.size === 0) return [];
+      writeFileAtomic(PIPELINE_PATH, toCsv(PIPELINE_COLUMNS, events.filter((_, i) => !drop.has(i))));
+      return events.filter((_, i) => drop.has(i));
     },
 
     async loadStages() {

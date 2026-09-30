@@ -314,6 +314,25 @@ describe("resume engine", () => {
     expect(anthropic.calls).toHaveLength(4);
   });
 
+  it("sends a package that drops an employment role back for repair", async () => {
+    writeFileSync(
+      path.join(data.engine, "facts", "experience.yml"),
+      "- id: exp.acme.role\n  claim: Developer at Acme\n  tags: [role_header]\n  strength: strong\n"
+    );
+    const anthropic = fakeAnthropic(() => packageInput);
+    server = await start(testConfig(data.root), { anthropic });
+
+    const res = await server.call("POST", "/api/packages/build", {
+      body: {
+        folder: FOLDER_A, company: "Acme", role: "Backend Developer",
+        postingText: "posting", base_variant: "dotnet_azure",
+      },
+    });
+    expect(res.status).toBe(422);
+    expect(anthropic.calls).toHaveLength(2);
+    expect(anthropic.calls[1].messages.at(-1).content[0].content).toContain("exp.acme");
+  });
+
   it("kills a hung validate step and answers 504 instead of hanging", async () => {
     writeFileSync(path.join(data.engine, "validate.py"), "setTimeout(() => {}, 60000);\n");
     const anthropic = fakeAnthropic(() => packageInput);

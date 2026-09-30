@@ -424,11 +424,24 @@ export function createApp(cfg, deps = {}) {
   // Only project/experience bullet facts (not headers, not identity/skills/
   // education) are ever selected as a resume bullet — see build.py's
   // SECTION_ANCHORS, which is the other half of this contract.
-  function selectableFactIds(facts) {
+  // A fact tagged only.<variant> belongs to a section that exists in that
+  // variant's template alone (e.g. the Shiraz IT role in resume_itsupport),
+  // so offering it to another variant would only produce a build.py error.
+  function selectableFactIds(facts, variant) {
     return Object.values(facts)
       .filter((f) => BULLET_FACT_PREFIXES.has(f.id.split(".")[0]))
       .filter((f) => !(f.tags || []).some((t) => BULLET_FACT_TAGS_EXCLUDE.has(t)))
+      .filter((f) => (f.tags || []).every((t) => !t.startsWith("only.") || t === `only.${variant}`))
       .map((f) => f.id);
+  }
+
+  // Every employment role (a role_header fact under exp.*) that this
+  // variant's template shows, as its section prefix ("exp.dena", ...).
+  function requiredRolePrefixes(facts, variant) {
+    return Object.values(facts)
+      .filter((f) => f.id.startsWith("exp.") && (f.tags || []).includes("role_header"))
+      .filter((f) => (f.tags || []).every((t) => !t.startsWith("only.") || t === `only.${variant}`))
+      .map((f) => f.id.split(".").slice(0, 2).join("."));
   }
 
   // Skill facts eligible for this build's TECHNICAL SKILLS section: shared
@@ -634,7 +647,7 @@ export function createApp(cfg, deps = {}) {
             items: {
               type: "object",
               properties: {
-                fact_id: { type: "string", enum: selectableFactIds(facts) },
+                fact_id: { type: "string", enum: selectableFactIds(facts, variant) },
                 text: { type: "string" },
               },
               required: ["fact_id", "text"],
@@ -734,7 +747,10 @@ export function createApp(cfg, deps = {}) {
           "each for exp.nmb, exp.eram and exp.sepid). Only project sections may be omitted.\n\n" +
           (base_variant === "itsupport"
             ? "This is an IT SUPPORT resume: lead with the exp.dena.it_* bullets (4-6 of them) and " +
-              "the skill.it_* lines; frame development work as a plus (scripting, SQL, knowing how " +
+              "the skill.it_* lines, and include the exp.shiraz role (2007-2011 IT support at a " +
+              "Sepid System reseller) with 2-3 of its bullets. Total hands-on IT support " +
+              "experience is about 5 years (2007-2011 plus 2022-2023): say at most '5+ years' of IT " +
+              "support, never more. Frame development work as a plus (scripting, SQL, knowing how " +
               "applications fail), include at most 1-2 short project sections, and never claim a " +
               "certification — the candidate has none.\n\n"
             : "") +
@@ -781,9 +797,22 @@ export function createApp(cfg, deps = {}) {
           interview_questions_markdown: generated.interview_questions_markdown,
         };
         writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
-        validation = await runProcess(python, [path.join(ENGINE_DIR, "validate.py"), planPath], {
-          timeoutMs: cfg.validateTimeoutMs ?? VALIDATE_TIMEOUT_MS,
-        });
+        // The prompt asks for every employment role, but the model has still
+        // dropped a whole role (a 4-year hole in the timeline) — so it's
+        // checked here and fed to the same repair turn as a guardian error.
+        const missingRoles = requiredRolePrefixes(facts, base_variant).filter(
+          (prefix) => !(generated.bullets || []).some((b) => (b.fact_id || "").startsWith(`${prefix}.`))
+        );
+        validation = missingRoles.length
+          ? {
+              status: 1,
+              stdout:
+                `ERROR: employment role(s) missing from the résumé: ${missingRoles.join(", ")} — ` +
+                "every role needs at least one bullet, or the timeline shows a gap\n",
+            }
+          : await runProcess(python, [path.join(ENGINE_DIR, "validate.py"), planPath], {
+              timeoutMs: cfg.validateTimeoutMs ?? VALIDATE_TIMEOUT_MS,
+            });
 
         if (validation.timedOut) {
           unlinkSync(planPath);

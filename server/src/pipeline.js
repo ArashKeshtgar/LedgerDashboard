@@ -76,6 +76,9 @@ export function attachPipeline(rows, events, { stages = [], terminal = [] }, now
 
     return {
       ...r,
+      // Which job family the row belongs to — derived from the résumé
+      // variant it was built from, so there's one stored source of truth.
+      track: r.variant === "itsupport" ? "it" : "dev",
       stage,
       stageIndex: order.has(stage) ? order.get(stage) : -1,
       isTerminal: terminalKeys.has(stage),

@@ -7,6 +7,8 @@ import {
   logFollowup,
   deleteApplication,
 } from "../api.js";
+import { TrackBadge, TrackTabs } from "../components/TrackBadge.jsx";
+import { trackOf } from "../track.js";
 
 function matchColor(score) {
   const n = Number(score);
@@ -26,6 +28,7 @@ function Card({ app, dragging, onDragStart, onDragEnd, canFollowup, onLogFollowu
   const cardClass = [
     "pipeline-card",
     app.needsFollowup ? "pipeline-card-followup" : "",
+    trackOf(app) === "it" ? "pipeline-card-track-it" : "",
     dragging ? "pipeline-card-dragging" : "",
   ]
     .filter(Boolean)
@@ -51,7 +54,9 @@ function Card({ app, dragging, onDragStart, onDragEnd, canFollowup, onLogFollowu
             <span aria-hidden="true">⏰</span> Follow up
           </div>
         )}
-        <div className="pipeline-card-company">{app.company}</div>
+        <div className="pipeline-card-company">
+          {app.company} <TrackBadge track={trackOf(app)} />
+        </div>
         <div className="pipeline-card-role">{app.role}</div>
         {app.followupCount > 0 && (
           <div className="pipeline-card-followup-meta">
@@ -86,10 +91,12 @@ function Card({ app, dragging, onDragStart, onDragEnd, canFollowup, onLogFollowu
 
 function PendingCard({ app, onApprove, approving, onDelete, deleting }) {
   return (
-    <div className="pipeline-card pipeline-pending-card">
+    <div className={`pipeline-card pipeline-pending-card${trackOf(app) === "it" ? " pipeline-card-track-it" : ""}`}>
       <div className="d-flex justify-content-between align-items-start">
         <Link to={`/applications/${app.id}`} className="pipeline-pending-link">
-          <div className="pipeline-card-company">{app.company}</div>
+          <div className="pipeline-card-company">
+            {app.company} <TrackBadge track={trackOf(app)} />
+          </div>
           <div className="pipeline-card-role">{app.role}</div>
         </Link>
         <button
@@ -144,6 +151,7 @@ export default function PipelineBoard() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [matchFilter, setMatchFilter] = useState("all");
   const [followupOnly, setFollowupOnly] = useState(false);
+  const [trackFilter, setTrackFilter] = useState("all");
 
   // Drag & drop state
   const [draggedFolder, setDraggedFolder] = useState(null);
@@ -191,6 +199,7 @@ export default function PipelineBoard() {
 
   const q = query.trim().toLowerCase();
   const visible = rows.filter((r) => {
+    if (trackFilter !== "all" && trackOf(r) !== trackFilter) return false;
     if (followupOnly && !r.needsFollowup) return false;
     if (sourceFilter !== "all" && r.source !== sourceFilter) return false;
     if (!matchTest(r.match_score)) return false;
@@ -312,6 +321,8 @@ export default function PipelineBoard() {
           {followupError}
         </div>
       )}
+
+      <TrackTabs value={trackFilter} onChange={setTrackFilter} rows={rows} trackOf={trackOf} />
 
       <div className="pipeline-toolbar">
         <div className="search-input-wrap">

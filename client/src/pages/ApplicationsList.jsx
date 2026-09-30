@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchApplications, fetchPipelineStages, moveApplicationStage } from "../api.js";
+import { TrackBadge, TrackTabs } from "../components/TrackBadge.jsx";
+import { trackOf } from "../track.js";
 
 function matchChipClass(score) {
   const n = Number(score);
@@ -79,6 +81,7 @@ export default function ApplicationsList() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [matchFilter, setMatchFilter] = useState("all");
   const [followupOnly, setFollowupOnly] = useState(false);
+  const [trackFilter, setTrackFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [approvingFolder, setApprovingFolder] = useState(null);
@@ -114,7 +117,7 @@ export default function ApplicationsList() {
   useEffect(() => {
     if (scrollAreaRef.current) scrollAreaRef.current.scrollTop = 0;
     setScrollPos({ index: 1, showTop: false });
-  }, [query, stageFilter, sourceFilter, matchFilter, followupOnly, dateFrom, dateTo]);
+  }, [query, stageFilter, sourceFilter, matchFilter, followupOnly, dateFrom, dateTo, trackFilter]);
 
   const sources = useMemo(
     () => [...new Set(rows.map((r) => r.source).filter(Boolean))].sort(),
@@ -140,6 +143,7 @@ export default function ApplicationsList() {
 
   const q = query.toLowerCase();
   const filtered = rows.filter((r) => {
+    if (trackFilter !== "all" && trackOf(r) !== trackFilter) return false;
     if (stageFilter !== "all" && r.stage !== stageFilter) return false;
     if (sourceFilter !== "all" && r.source !== sourceFilter) return false;
     if (followupOnly && !r.needsFollowup) return false;
@@ -160,6 +164,7 @@ export default function ApplicationsList() {
     setSourceFilter("all");
     setMatchFilter("all");
     setFollowupOnly(false);
+    setTrackFilter("all");
     setDateFrom("");
     setDateTo("");
   };
@@ -170,6 +175,7 @@ export default function ApplicationsList() {
     sourceFilter !== "all" ||
     matchFilter !== "all" ||
     followupOnly ||
+    trackFilter !== "all" ||
     dateFrom ||
     dateTo;
 
@@ -253,6 +259,8 @@ export default function ApplicationsList() {
           {approveError}
         </div>
       )}
+
+      <TrackTabs value={trackFilter} onChange={setTrackFilter} rows={rows} trackOf={trackOf} />
 
       <div className="pipeline-toolbar mb-3">
         <select
@@ -355,6 +363,7 @@ export default function ApplicationsList() {
                 <tr
                   key={row.id}
                   ref={i === 0 ? firstRowRef : undefined}
+                  className={trackOf(row) === "it" ? "row-track-it" : undefined}
                   style={{ animationDelay: `${Math.min(i * 20, 260)}ms` }}
                 >
                   <td className="row-index">{i + 1}</td>
@@ -363,7 +372,9 @@ export default function ApplicationsList() {
                   </td>
                   <td>
                     <div className="cell-stack">
-                      <span className="cell-primary cell-truncate" title={row.company}>{row.company}</span>
+                      <span className="cell-primary cell-truncate" title={row.company}>
+                        {row.company} <TrackBadge track={trackOf(row)} className="ms-1" />
+                      </span>
                       <span className="cell-secondary cell-truncate" title={row.role}>{row.role}</span>
                     </div>
                   </td>

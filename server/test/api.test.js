@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import path from "path";
 import { FOLDER_A, FOLDER_B, fakeAnthropic, makeDataDir, startApp, testConfig } from "./fixture.js";
 import { createCsvStore } from "../src/stores/csvStore.js";
@@ -239,6 +239,23 @@ describe("resume engine", () => {
     expect(row.gap_tags).toBe("etl-ssis,power-bi");
     expect(row.match_score).toBe("70");
     expect(row.variant).toBe("powerplatform");
+    expect(row.track).toBe("dev");
+  });
+
+  it("marks a package built from the itsupport variant as the IT track", async () => {
+    const anthropic = fakeAnthropic(() => packageInput);
+    server = await start(testConfig(data.root), { anthropic });
+
+    const res = await server.call("POST", "/api/packages/build", {
+      body: {
+        folder: FOLDER_A, company: "Acme", role: "Service Desk Analyst",
+        postingText: "posting", base_variant: "itsupport",
+      },
+    });
+    expect(res.status).toBe(201);
+    const listed = (await (await server.call("GET", "/api/applications")).json())
+      .find((r) => r.folder === FOLDER_A);
+    expect(listed.track).toBe("it");
   });
 
   it("keeps serving other requests while a build runs, and refuses a second build of the same folder", async () => {
@@ -263,6 +280,38 @@ describe("resume engine", () => {
 
     release();
     expect((await first).status).toBe(201);
+  });
+
+  it("gives a guardian-rejected package one repair turn with the errors, then gives up", async () => {
+    // Stand-in guardian: rejects until a marker file exists, which the test
+    // creates between the two model calls.
+    const marker = path.join(data.engine, "ok.marker");
+    writeFileSync(
+      path.join(data.engine, "validate.py"),
+      `if (!require('fs').existsSync(${JSON.stringify(marker)})) { console.log("ERROR: summary: blacklisted guarantee-verb 'ensuring' found"); process.exit(1); }\n`
+    );
+    let repairable = true;
+    const anthropic = fakeAnthropic(() => {
+      if (repairable && anthropic.calls.length === 2) writeFileSync(marker, "");
+      return packageInput;
+    });
+    server = await start(testConfig(data.root), { anthropic });
+    const body = {
+      folder: FOLDER_A, company: "Acme", role: "Backend Developer",
+      postingText: "posting", base_variant: "dotnet_azure",
+    };
+
+    expect((await server.call("POST", "/api/packages/build", { body })).status).toBe(201);
+    expect(anthropic.calls).toHaveLength(2);
+    const repair = anthropic.calls[1].messages.at(-1).content[0];
+    expect(repair.type).toBe("tool_result");
+    expect(repair.content).toContain("'ensuring'");
+
+    rmSync(marker);
+    repairable = false;
+    const failed = await server.call("POST", "/api/packages/build", { body });
+    expect(failed.status).toBe(422);
+    expect(anthropic.calls).toHaveLength(4);
   });
 
   it("kills a hung validate step and answers 504 instead of hanging", async () => {

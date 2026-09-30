@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { analyzePosting, buildPackage, deleteApplication } from "../api.js";
+import { TrackBadge } from "../components/TrackBadge.jsx";
+import { trackForVariant } from "../track.js";
 
 const SOURCES = ["linkedin", "indeed", "ziprecruiter", "company_site", "referral", "agency", "other"];
 
@@ -201,7 +203,10 @@ export default function NewPackage() {
                 <span className={`badge ${RECOMMENDATION_LABEL[analysis.recommendation].className}`}>
                   {RECOMMENDATION_LABEL[analysis.recommendation].text}
                 </span>
-                <span className="text-muted small">base template: {analysis.base_variant}</span>
+                <span className="text-muted small">
+                  base template: {analysis.base_variant}{" "}
+                  <TrackBadge track={trackForVariant(analysis.base_variant)} always />
+                </span>
               </div>
 
               <div className="text-muted small mb-3">

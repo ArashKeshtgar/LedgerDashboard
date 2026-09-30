@@ -488,8 +488,11 @@ export function createApp(cfg, deps = {}) {
       properties: {
         base_variant: {
           type: "string",
-          enum: ["dotnet_azure", "powerplatform"],
-          description: "Which base resume template fits this posting better.",
+          enum: ["dotnet_azure", "powerplatform", "itsupport"],
+          description:
+            "Which base resume template fits this posting better. Use itsupport for IT support, " +
+            "help desk, service desk, desktop support and IT technician roles (score those against " +
+            "the exp.dena.it_* and skill.it_* facts, not against developer skills).",
         },
         match_score: { type: "integer", description: "0-100." },
         recommendation: { type: "string", enum: ["apply", "apply_with_caveats", "skip"] },
@@ -707,15 +710,17 @@ export function createApp(cfg, deps = {}) {
         .join("\n");
 
       const client = anthropicClient();
-      const message = await client.messages.create({
+      const request = {
         model: "claude-sonnet-5",
         max_tokens: 8192,
         system:
           "You are building a tailored job application package using ONLY the fact bank below. " +
           "Rules: every bullet must cite a real fact_id from the bank; any number you write in a " +
           "bullet must be exactly one of that fact's allowed_numbers (or omit numbers entirely); " +
-          "never use any of that fact's forbidden words/phrases; never use the words locks, " +
-          "prevents, guarantees or ensures anywhere. Rewrite each bullet's wording (not its " +
+          "never use any of that fact's forbidden words/phrases; never use any form of the verbs " +
+          "lock, prevent, guarantee or ensure anywhere — not in the summary, bullets, cover letter, " +
+          "match report or interview questions (so no locks/locking/prevents/preventing/ensures/" +
+          "ensuring/guaranteed etc.; say e.g. 'helps', 'reduces', 'checks' instead). Rewrite each bullet's wording (not its " +
           "underlying facts) to use the posting's own vocabulary. Also pick which TECHNICAL " +
           "SKILLS lines to include via skill_ids — that text is used exactly as written in the " +
           "fact bank, never rewritten, so just choose and order the lines. Pick 3-5 bullets per relevant " +
@@ -727,6 +732,12 @@ export function createApp(cfg, deps = {}) {
           "exp.sepid): never omit a role, because a missing role reads as a hole in the timeline. " +
           "Give each at least one bullet (3-5 for the ones relevant to this posting; exactly one " +
           "each for exp.nmb, exp.eram and exp.sepid). Only project sections may be omitted.\n\n" +
+          (base_variant === "itsupport"
+            ? "This is an IT SUPPORT resume: lead with the exp.dena.it_* bullets (4-6 of them) and " +
+              "the skill.it_* lines; frame development work as a plus (scripting, SQL, knowing how " +
+              "applications fail), include at most 1-2 short project sections, and never claim a " +
+              "certification — the candidate has none.\n\n"
+            : "") +
           (caveats
             ? "The candidate has real gaps for this posting — address them honestly in the " +
               "cover letter rather than hiding them.\n\n"
@@ -742,35 +753,66 @@ export function createApp(cfg, deps = {}) {
         ],
         tools: [buildPlanTool(facts, base_variant)],
         tool_choice: { type: "tool", name: "submit_package" },
-      });
-
-      const toolUse = message.content.find((b) => b.type === "tool_use");
-      if (!toolUse) throw new Error("Model did not return a structured package");
-      const generated = toolUse.input;
-
-      const plan = {
-        base_variant,
-        target_role: role,
-        summary: generated.summary,
-        bullets: generated.bullets,
-        skill_ids: generated.skill_ids,
-        match_report_markdown: generated.match_report_markdown,
-        cover_letter_markdown: generated.cover_letter_markdown,
-        interview_questions_markdown: generated.interview_questions_markdown,
       };
 
-      // Guardian check BEFORE anything is written to disk.
-      const planPath = path.join(ENGINE_DIR, `.tmp-plan-${randomUUID()}.json`);
-      writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+      // Guardian check BEFORE anything is written to disk. A rejected package
+      // gets ONE repair turn: the model sees validate.py's exact errors and
+      // resubmits. Most rejections are a single blacklisted word ("ensuring",
+      // or "locking" used as a SQL term) that a fresh generation would just as
+      // likely repeat somewhere else.
       const python = findPython(cfg.python);
-      const validation = await runProcess(python, [path.join(ENGINE_DIR, "validate.py"), planPath], {
-        timeoutMs: cfg.validateTimeoutMs ?? VALIDATE_TIMEOUT_MS,
-      });
+      const planPath = path.join(ENGINE_DIR, `.tmp-plan-${randomUUID()}.json`);
+      let generated;
+      let validation;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const message = await client.messages.create(request);
+        const toolUse = message.content.find((b) => b.type === "tool_use");
+        if (!toolUse) throw new Error("Model did not return a structured package");
+        generated = toolUse.input;
 
-      if (validation.timedOut) {
-        unlinkSync(planPath);
-        return res.status(504).json({ error: "validate.py timed out" });
+        const plan = {
+          base_variant,
+          target_role: role,
+          summary: generated.summary,
+          bullets: generated.bullets,
+          skill_ids: generated.skill_ids,
+          match_report_markdown: generated.match_report_markdown,
+          cover_letter_markdown: generated.cover_letter_markdown,
+          interview_questions_markdown: generated.interview_questions_markdown,
+        };
+        writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+        validation = await runProcess(python, [path.join(ENGINE_DIR, "validate.py"), planPath], {
+          timeoutMs: cfg.validateTimeoutMs ?? VALIDATE_TIMEOUT_MS,
+        });
+
+        if (validation.timedOut) {
+          unlinkSync(planPath);
+          return res.status(504).json({ error: "validate.py timed out" });
+        }
+        if (validation.status === 0) break;
+
+        request.messages = [
+          ...request.messages,
+          { role: "assistant", content: message.content },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: toolUse.id,
+                is_error: true,
+                content:
+                  "The guardian rejected this package:\n" +
+                  (validation.stdout || validation.stderr || "") +
+                  "\nCall submit_package again with the SAME content, changing only what these " +
+                  "errors point at (reword a blacklisted verb, e.g. 'row locking' -> 'row-level " +
+                  "concurrency', 'ensure' -> 'confirm'; drop a disallowed number or term).",
+              },
+            ],
+          },
+        ];
       }
+
       if (validation.status !== 0) {
         unlinkSync(planPath);
         return res.status(422).json({

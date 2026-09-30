@@ -846,3 +846,46 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .daily-line { animation: none; }
 }
+
+/* ---- Job family: IT Support roles are kept visibly apart from developer
+   roles (own colour, badge, row/card accent, and a filter tab). ---- */
+.chip-track-it  { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
+.chip-track-dev { background: rgba(42, 120, 214, 0.12); color: #1f5fad; }
+.chip-track-it,
+.chip-track-dev { font-size: 0.7rem; padding: 2px 8px; vertical-align: middle; }
+
+.row-track-it > td:first-child { box-shadow: inset 3px 0 0 #7c3aed; }
+.row-track-it { background: rgba(124, 58, 237, 0.035); }
+.pipeline-card-track-it { border-left: 3px solid #7c3aed; }
+
+.track-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  max-width: 100%;
+  overflow-x: auto;
+}
+.track-tab {
+  border: 0;
+  background: transparent;
+  color: #57564f;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.track-tab:hover { background: rgba(11, 11, 11, 0.05); }
+.track-tab.active { background: #1f5fad; color: #fff; }
+.track-tab-it.active { background: #6d28d9; }
+.track-tab-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  margin-left: 2px;
+}

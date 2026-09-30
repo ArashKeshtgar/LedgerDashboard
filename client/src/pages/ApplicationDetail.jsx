@@ -14,6 +14,8 @@ import StageTimeline from "../components/StageTimeline.jsx";
 import ContactCard from "../components/ContactCard.jsx";
 import ContactEditor from "../components/ContactEditor.jsx";
 import { daysUntilFollowup, followupMailto } from "../contact.js";
+import { TrackBadge } from "../components/TrackBadge.jsx";
+import { trackOf } from "../track.js";
 
 // Pipeline event dates are usually a plain YYYY-MM-DD, but the "Record a
 // stage update" form can attach a time too ("...T14:30") — show that as a
@@ -675,7 +677,9 @@ export default function ApplicationDetail() {
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
             <div>
-              <h4 className="mb-0 page-title">{app.company}</h4>
+              <h4 className="mb-0 page-title">
+                {app.company} <TrackBadge track={trackOf(app)} always />
+              </h4>
               <div className="text-muted">{app.role}</div>
             </div>
             <span className="badge bg-dark fs-6">{app.match_score}% match</span>

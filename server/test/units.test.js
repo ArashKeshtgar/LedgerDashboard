@@ -155,6 +155,16 @@ describe("loadConfig", () => {
     expect(cfg.host).toBe("0.0.0.0");
   });
 
+  it("accepts a long, distinct API_TOKEN only alongside a password", () => {
+    const withPassword = { DASHBOARD_PASSWORD: "long-enough-pass", SESSION_SECRET: secret };
+    const token = "k".repeat(32);
+    expect(loadConfig({ ...withPassword, API_TOKEN: token }).apiToken).toBe(token);
+    expect(loadConfig(withPassword).apiToken).toBe(null);
+    expect(() => loadConfig({ API_TOKEN: token })).toThrow(/DASHBOARD_PASSWORD/);
+    expect(() => loadConfig({ ...withPassword, API_TOKEN: "short" })).toThrow(/at least 32/);
+    expect(() => loadConfig({ ...withPassword, API_TOKEN: secret })).toThrow(/different/);
+  });
+
   it("rejects a short dashboard password", () => {
     expect(() => loadConfig({ DASHBOARD_PASSWORD: "short", SESSION_SECRET: secret })).toThrow(/at least 12/);
   });

@@ -459,6 +459,29 @@ describe("password login", () => {
   });
 });
 
+describe("API token", () => {
+  const TOKEN = "t".repeat(40);
+
+  beforeEach(async () => {
+    server = await start(
+      testConfig(data.root, { password: "correct-horse-battery", sessionSecret: "s".repeat(40), apiToken: TOKEN })
+    );
+  });
+
+  it("lets a script in with the bearer token", async () => {
+    const auth = { Authorization: `Bearer ${TOKEN}` };
+    expect((await server.call("GET", "/api/applications", { headers: auth })).status).toBe(200);
+    expect(await (await server.call("GET", "/api/session", { headers: auth })).json()).toMatchObject({ authed: true });
+  });
+
+  it("refuses a wrong or missing token", async () => {
+    const wrong = { Authorization: `Bearer ${"x".repeat(40)}` };
+    expect((await server.call("GET", "/api/applications", { headers: wrong })).status).toBe(401);
+    expect((await server.call("GET", "/api/applications", { headers: { Authorization: TOKEN } })).status).toBe(401);
+    expect((await server.call("GET", "/api/applications")).status).toBe(401);
+  });
+});
+
 describe("recruiters", () => {
   it("uses a stable hash id instead of the row position", async () => {
     server = await start(testConfig(data.root));

@@ -101,13 +101,21 @@ export function createApp(cfg, deps = {}) {
       res.json({ authed: false });
     });
 
+    // A script's bearer token counts as a logged-in session. Browsers never
+    // send this header on their own, so it adds no cross-site exposure.
+    const hasApiToken = (req) => {
+      if (!cfg.apiToken) return false;
+      const m = /^Bearer (.+)$/.exec(req.get("authorization") || "");
+      return !!m && passwordMatches(m[1], cfg.apiToken);
+    };
+
     app.get("/api/session", (req, res) => {
-      res.json({ authed: !!req.session?.authed, passwordRequired: true });
+      res.json({ authed: !!req.session?.authed || hasApiToken(req), passwordRequired: true });
     });
 
     app.use("/api", (req, res, next) => {
       if (req.path === "/login" || req.path === "/session") return next();
-      if (req.session?.authed) return next();
+      if (req.session?.authed || hasApiToken(req)) return next();
       res.status(401).json({ error: "Login required" });
     });
   } else {

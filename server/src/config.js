@@ -45,6 +45,20 @@ export function loadConfig(env = process.env) {
     }
   }
 
+  // For scripts (the nightly job search) that can't log in through the
+  // browser form: `Authorization: Bearer <API_TOKEN>`. Only meaningful when
+  // a password is set — without one there's no login to get past.
+  const apiToken = env.API_TOKEN || null;
+  if (apiToken) {
+    if (!password) throw new Error("API_TOKEN only makes sense with DASHBOARD_PASSWORD set.");
+    if (apiToken.length < MIN_SESSION_SECRET_LENGTH) {
+      throw new Error(`API_TOKEN must be a random value of at least ${MIN_SESSION_SECRET_LENGTH} characters.`);
+    }
+    if (apiToken === password || apiToken === sessionSecret) {
+      throw new Error("API_TOKEN must be different from DASHBOARD_PASSWORD and SESSION_SECRET.");
+    }
+  }
+
   // Data store: the CSV files (default) or SQL Server. See stores/index.js.
   const store = (env.STORE || "csv").toLowerCase();
   if (store !== "csv" && store !== "sql") throw new Error(`STORE must be "csv" or "sql", not "${env.STORE}".`);
@@ -72,6 +86,7 @@ export function loadConfig(env = process.env) {
     port: Number(env.PORT) || 4310,
     password,
     sessionSecret,
+    apiToken,
     secureCookies,
     allowedOrigins: [...(production ? [] : DEV_ORIGINS), ...extraOrigins],
     // Locally this is always the sibling folder. In a deployed environment

@@ -572,6 +572,44 @@ export function createApp(cfg, deps = {}) {
     };
   }
 
+  // One scoring call against the fact bank and gap dictionary as they are
+  // right now. Shared by /analyze (a new posting) and /reanalyze (a posting
+  // scored before newer evidence landed — a row's gap_tags are a snapshot).
+  async function analyzePosting(company, role, postingText) {
+    const facts = loadFactBank();
+    const factSummary = Object.values(facts)
+      .filter((f) => !(f.tags || []).includes("excluded"))
+      .map((f) => `- ${f.id} [${f.strength}]: ${f.claim.trim().replace(/\s+/g, " ")}`)
+      .join("\n");
+    const gapTagsDict = loadGapTagsDict();
+    const gapTagsSummary = Object.entries(gapTagsDict)
+      .map(([slug, desc]) => `- ${slug}: ${desc}`)
+      .join("\n");
+
+    // A dictionary description can go stale when a gap is closed (mongodb-nosql
+    // said "all relational" after ReBiomed added MongoDB facts, and the model
+    // trusted the description over the facts) — so the facts are ranked first.
+    const client = anthropicClient();
+    const message = await client.messages.create({
+      model: "claude-sonnet-5",
+      max_tokens: 4096,
+      system:
+        "You are scoring how well a job posting matches a candidate, using ONLY the facts " +
+        "listed below — never invent experience, numbers or skills not in this list. " +
+        "Call submit_analysis with your result. The fact bank is the source of truth: if a " +
+        "dictionary description below says the candidate lacks something a fact shows, the " +
+        "fact wins.\n\nCANDIDATE FACT BANK:\n" + factSummary +
+        "\n\nEXISTING GAP-TAG DICTIONARY (reuse these slugs when a gap matches one; only " +
+        "coin a new short kebab-case slug when it doesn't):\n" + gapTagsSummary,
+      messages: [
+        { role: "user", content: `Job posting for ${role} at ${company}:\n\n${postingText}` },
+      ],
+      tools: [ANALYZE_TOOL],
+      tool_choice: { type: "tool", name: "submit_analysis" },
+    });
+    return normalizeAnalysis(message);
+  }
+
   // POST /api/packages/analyze - stage 1 (light). This is the ONLY place a
   // draft row/folder gets created for the AI-package flow — build fills that
   // same folder in rather than making a new one, so analyzing a posting twice
@@ -586,34 +624,7 @@ export function createApp(cfg, deps = {}) {
       }
 
       const duplicate = findCompanyHistory(company);
-      const facts = loadFactBank();
-      const factSummary = Object.values(facts)
-        .filter((f) => !(f.tags || []).includes("excluded"))
-        .map((f) => `- ${f.id} [${f.strength}]: ${f.claim.trim().replace(/\s+/g, " ")}`)
-        .join("\n");
-      const gapTagsDict = loadGapTagsDict();
-      const gapTagsSummary = Object.entries(gapTagsDict)
-        .map(([slug, desc]) => `- ${slug}: ${desc}`)
-        .join("\n");
-
-      const client = anthropicClient();
-      const message = await client.messages.create({
-        model: "claude-sonnet-5",
-        max_tokens: 4096,
-        system:
-          "You are scoring how well a job posting matches a candidate, using ONLY the facts " +
-          "listed below — never invent experience, numbers or skills not in this list. " +
-          "Call submit_analysis with your result.\n\nCANDIDATE FACT BANK:\n" + factSummary +
-          "\n\nEXISTING GAP-TAG DICTIONARY (reuse these slugs when a gap matches one; only " +
-          "coin a new short kebab-case slug when it doesn't):\n" + gapTagsSummary,
-        messages: [
-          { role: "user", content: `Job posting for ${role} at ${company}:\n\n${postingText}` },
-        ],
-        tools: [ANALYZE_TOOL],
-        tool_choice: { type: "tool", name: "submit_analysis" },
-      });
-
-      const analysis = normalizeAnalysis(message);
+      const analysis = await analyzePosting(company, role, postingText);
 
       const folder = await createApplicationRow({
         company, role, location, source, posting_url,
@@ -631,6 +642,44 @@ export function createApp(cfg, deps = {}) {
         duplicate: duplicate
           ? { display: duplicate.display, applications: duplicate.applications || [] }
           : null,
+      });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // POST /api/packages/reanalyze - re-score an existing draft's saved
+  // posting.txt against today's fact bank, and overwrite its match_score and
+  // gap_tags. Drafts only: once a package is sent, its gap_tags record what
+  // was missing when it went out, which is what Stats correlates with
+  // rejections. Variant is left alone (the build may already rely on it).
+  // Body: { folder }
+  app.post("/api/packages/reanalyze", async (req, res) => {
+    try {
+      const { folder } = req.body || {};
+      if (!(await findLedgerRow(folder))) {
+        return res.status(404).json({ error: `Unknown folder: ${folder}` });
+      }
+      // The stage comes from pipeline events; the ledger's status column
+      // stays "draft" after a package is sent.
+      const row = await withPipelineFor(folder);
+      if (row.stage !== "draft") {
+        return res.status(409).json({ error: "Only drafts can be re-analyzed — this one was already sent" });
+      }
+      const postingPath = path.join(resolveApplicationFolder(APPLICATIONS_DIR, folder), "posting.txt");
+      if (!existsSync(postingPath)) {
+        return res.status(422).json({ error: "This application has no saved posting.txt to re-analyze" });
+      }
+
+      const analysis = await analyzePosting(row.company, row.role, readFileSync(postingPath, "utf-8"));
+      await updateApplicationRowByFolder(folder, {
+        match_score: analysis.match_score,
+        gap_tags: analysis.gap_tags.join(","),
+      });
+      res.json({
+        ...analysis,
+        previous: { match_score: row.match_score, gap_tags: row.gap_tags },
+        application: await withPipelineFor(folder),
       });
     } catch (err) {
       sendError(res, err);

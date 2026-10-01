@@ -152,6 +152,19 @@ export async function buildPackage(fields) {
   return body;
 }
 
+// Re-score a draft's saved posting against today's fact bank — its gap
+// tags were a snapshot from when it was first analyzed.
+export async function reanalyzePackage(folder) {
+  const res = await fetch(`${API_BASE}/api/packages/reanalyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Re-analyze failed (${res.status})`);
+  return body;
+}
+
 export async function logFollowup(folder, note = "") {
   const res = await fetch(`${API_BASE}/api/pipeline-events/followup`, {
     method: "POST",

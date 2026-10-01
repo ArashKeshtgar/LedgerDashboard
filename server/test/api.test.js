@@ -191,6 +191,44 @@ describe("resume engine", () => {
     expect((await (await server.call("GET", "/api/applications")).json()).length).toBe(before);
   });
 
+  it("reanalyze re-scores a draft's saved posting and keeps its variant", async () => {
+    let call = 0;
+    const anthropic = fakeAnthropic(() => (++call === 1
+      ? { base_variant: "dotnet_azure", match_score: 72, recommendation: "apply",
+        reasoning: "Ok.", gaps: ["No MongoDB", "No degree"], gap_tags: ["mongodb-nosql", "bachelor-degree-cs"] }
+      : { base_variant: "powerplatform", match_score: 80, recommendation: "apply",
+        reasoning: "Better.", gaps: ["No degree"], gap_tags: ["bachelor-degree-cs"] }));
+    server = await start(testConfig(data.root), { anthropic });
+    const { folder } = await (await server.call("POST", "/api/packages/analyze", {
+      body: { company: "Initech", role: "Dotnet Developer", postingText: "We need MongoDB." },
+    })).json();
+
+    const res = await server.call("POST", "/api/packages/reanalyze", { body: { folder } });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.previous.gap_tags).toBe("mongodb-nosql,bachelor-degree-cs");
+    expect(body.application.gap_tags).toBe("bachelor-degree-cs");
+    expect(body.application.match_score).toBe("80");
+    expect(body.application.variant).toBe("dotnet_azure");
+    expect(anthropic.calls[1].messages[0].content).toContain("We need MongoDB.");
+    expect(anthropic.calls[1].system).toContain("the fact wins");
+  });
+
+  it("reanalyze refuses a sent application and one without a posting, before calling the model", async () => {
+    const anthropic = fakeAnthropic(() => ({}));
+    server = await start(testConfig(data.root), { anthropic });
+
+    expect((await server.call("POST", "/api/packages/reanalyze", { body: { folder: FOLDER_A } })).status)
+      .toBe(422);
+    writeFileSync(path.join(data.engine, "applications", FOLDER_A, "posting.txt"), "posting", "utf-8");
+    await server.call("POST", "/api/pipeline-events", { body: { folder: FOLDER_A, stage: "applied" } });
+    expect((await server.call("POST", "/api/packages/reanalyze", { body: { folder: FOLDER_A } })).status)
+      .toBe(409);
+    expect((await server.call("POST", "/api/packages/reanalyze", { body: { folder: "../facts" } })).status)
+      .toBe(404);
+    expect(anthropic.calls).toHaveLength(0);
+  });
+
   it("build refuses a folder outside applications/ before calling the model", async () => {
     const anthropic = fakeAnthropic(() => packageInput);
     server = await start(testConfig(data.root), { anthropic });

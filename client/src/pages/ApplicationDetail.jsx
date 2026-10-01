@@ -8,6 +8,7 @@ import {
   logFollowup,
   updateApplication,
   buildPackage,
+  reanalyzePackage,
   deleteApplication,
 } from "../api.js";
 import StageTimeline from "../components/StageTimeline.jsx";
@@ -191,6 +192,9 @@ export default function ApplicationDetail() {
   const [contactError, setContactError] = useState(null);
   const [mailOpened, setMailOpened] = useState(false);
   const [showRebuild, setShowRebuild] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const [reanalyzeResult, setReanalyzeResult] = useState(null);
+  const [reanalyzeError, setReanalyzeError] = useState(null);
   const [followupPending, setFollowupPending] = useState(false);
   const [followupError, setFollowupError] = useState(null);
   const [editingField, setEditingField] = useState(null);
@@ -327,6 +331,23 @@ export default function ApplicationDetail() {
     }
   }
 
+  // Gap tags are saved once, when the posting is first analyzed — evidence
+  // added to the fact bank later doesn't reach them until this re-scores it.
+  async function handleReanalyze() {
+    setReanalyzeError(null);
+    setReanalyzeResult(null);
+    setReanalyzing(true);
+    try {
+      const result = await reanalyzePackage(app.folder);
+      setApp((a) => ({ ...a, ...result.application }));
+      setReanalyzeResult(result);
+    } catch (e) {
+      setReanalyzeError(e.message);
+    } finally {
+      setReanalyzing(false);
+    }
+  }
+
   async function handleLogFollowup(note = "") {
     setFollowupError(null);
     setFollowupPending(true);
@@ -445,15 +466,55 @@ export default function ApplicationDetail() {
                 ? "📦 The package is built but not sent yet — review the files below, send the application, then mark it as sent. Until then it won't show up on the Pipeline or count in Stats."
                 : "📝 This package hasn't been sent yet — it won't show up on the Pipeline or count in Stats until you decide. Nothing gets built until you say so."}
             </span>
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-danger rounded-pill"
-              disabled={deleting || !!deciding}
-              onClick={() => setShowDeleteConfirm((v) => !v)}
-            >
-              🗑️ Delete draft
-            </button>
+            <div className="d-flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-primary rounded-pill"
+                disabled={reanalyzing || deleting || !!deciding}
+                title="Re-score this posting against today's fact bank and refresh its gap tags"
+                onClick={handleReanalyze}
+              >
+                {reanalyzing ? "Re-analyzing…" : "🔄 Re-analyze gaps"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger rounded-pill"
+                disabled={deleting || !!deciding}
+                onClick={() => setShowDeleteConfirm((v) => !v)}
+              >
+                🗑️ Delete draft
+              </button>
+            </div>
           </div>
+
+          {reanalyzeError && (
+            <div className="alert alert-danger py-2 px-3 mt-2 mb-0" role="alert">
+              {reanalyzeError}
+            </div>
+          )}
+          {reanalyzeResult && (
+            <div className="alert alert-info py-2 px-3 mt-2 mb-0" role="status">
+              <div>
+                🔄 Re-analyzed — match {reanalyzeResult.previous.match_score || "—"} →{" "}
+                {reanalyzeResult.match_score}; gap tags{" "}
+                <code>{reanalyzeResult.previous.gap_tags || "none"}</code> →{" "}
+                <code>{reanalyzeResult.gap_tags.join(",") || "none"}</code>
+              </div>
+              {reanalyzeResult.gaps.length > 0 && (
+                <ul className="mb-0 mt-1 small">
+                  {reanalyzeResult.gaps.map((g, i) => (
+                    <li key={i}>{g}</li>
+                  ))}
+                </ul>
+              )}
+              {packageBuilt && (
+                <div className="small mt-1">
+                  The built résumé and cover letter still reflect the old analysis — rebuild to
+                  refresh them.
+                </div>
+              )}
+            </div>
+          )}
 
           {showDeleteConfirm && (
             <div className="d-flex flex-wrap gap-2 align-items-center mt-2 pt-2 border-top">

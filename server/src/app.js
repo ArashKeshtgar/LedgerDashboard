@@ -15,7 +15,7 @@ import { RECRUITER_DATE_FIELDS } from "./stores/shape.js";
 import { CONTACT_FIELDS, ContactValidationError, resolveContact } from "./contact.js";
 import { isStoreValidationError } from "./stores/sqlStore.js";
 import { registerTruthRoutes } from "./truthRoutes.js";
-import { bankFingerprint, readFacts } from "./truthBank.js";
+import { bankFingerprint, gapStatus, readFacts } from "./truthBank.js";
 
 const VALIDATE_TIMEOUT_MS = 30_000;
 // LibreOffice's docx -> pdf conversion is the slow part of a build.
@@ -605,8 +605,11 @@ export function createApp(cfg, deps = {}) {
       .map((f) => `- ${f.id} [${f.strength}]: ${f.claim.trim().replace(/\s+/g, " ")}`)
       .join("\n");
     const gapTagsDict = loadGapTagsDict();
+    // Each slug carries its status (read from the label, as everywhere else):
+    // without it the model reused a closed slug (frontend-modern) for a
+    // narrower gap that's still real (legacy AngularJS, team-production React).
     const gapTagsSummary = Object.entries(gapTagsDict)
-      .map(([slug, desc]) => `- ${slug}: ${desc}`)
+      .map(([slug, desc]) => `- ${slug} [${gapStatus(String(desc ?? "")).toUpperCase()}]: ${desc}`)
       .join("\n");
 
     // A dictionary description can go stale when a gap is closed (mongodb-nosql
@@ -623,7 +626,10 @@ export function createApp(cfg, deps = {}) {
         "dictionary description below says the candidate lacks something a fact shows, the " +
         "fact wins.\n\nCANDIDATE FACT BANK:\n" + factSummary +
         "\n\nEXISTING GAP-TAG DICTIONARY (reuse these slugs when a gap matches one; only " +
-        "coin a new short kebab-case slug when it doesn't):\n" + gapTagsSummary,
+        "coin a new short kebab-case slug when it doesn't). Never put a [CLOSED] slug in " +
+        "gap_tags: the candidate has that evidence. If a narrower part of it is still missing " +
+        "for this posting (e.g. legacy AngularJS when modern Angular is closed), coin a more " +
+        "specific slug for exactly that part instead:\n" + gapTagsSummary,
       messages: [
         { role: "user", content: `Job posting for ${role} at ${company}:\n\n${postingText}` },
       ],

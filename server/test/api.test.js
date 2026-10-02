@@ -212,6 +212,7 @@ describe("resume engine", () => {
     expect(body.application.variant).toBe("dotnet_azure");
     expect(anthropic.calls[1].messages[0].content).toContain("We need MongoDB.");
     expect(anthropic.calls[1].system).toContain("the fact wins");
+    expect(anthropic.calls[1].system).toContain("Never put a [CLOSED] slug in gap_tags");
   });
 
   it("reanalyze refuses a sent application and one without a posting, before calling the model", async () => {

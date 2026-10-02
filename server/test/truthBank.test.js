@@ -382,3 +382,19 @@ describe("résumé view", () => {
     expect(body.document.paragraphs[1].fact_id).toBeUndefined();
   });
 });
+
+describe("analyze prompt", () => {
+  it("marks each gap slug with its status so a closed one isn't reused", async () => {
+    const data = makeDataDir();
+    writeFileSync(path.join(data.engine, "gap_tags.yml"), 'frontend-modern: "React/Angular — کامل بسته شد"\netl-ssis: "SSIS"\n');
+    const anthropic = fakeAnthropic(() => ({
+      base_variant: "dotnet_azure", match_score: 60, recommendation: "apply", reasoning: "ok", gaps: [], gap_tags: [],
+    }));
+    const server = await startApp(testConfig(data.root), { anthropic });
+    await server.call("POST", "/api/packages/analyze", { body: { company: "X", role: "Dev", postingText: "AngularJS" } });
+    expect(anthropic.calls[0].system).toContain("- frontend-modern [CLOSED]:");
+    expect(anthropic.calls[0].system).toContain("- etl-ssis [OPEN]:");
+    await server.close();
+    data.cleanup();
+  });
+});

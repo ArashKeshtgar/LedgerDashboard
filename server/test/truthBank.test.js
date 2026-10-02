@@ -6,7 +6,7 @@ import { spawnSync } from "child_process";
 import {
   deleteFact, gapStatus, readFacts, renderFact, saveFact, saveGap, TruthBankError,
 } from "../src/truthBank.js";
-import { computeHealth } from "../src/health.js";
+import { computeHealth, mentions } from "../src/health.js";
 import { FOLDER_A, FOLDER_B, fakeAnthropic, makeDataDir, startApp, testConfig } from "./fixture.js";
 
 const fact = (id, over = {}) => ({
@@ -152,6 +152,14 @@ describe("health checks", () => {
     expect(issues.some((i) => i.kind === "tag-not-in-claim" && /security/.test(i.title))).toBe(false);
   });
 
+  it("accepts a singular or inflected mention of a tag", () => {
+    expect(mentions("stored_procedures", "a stored procedure suite")).toBe(true);
+    expect(mentions("reverse_engineering", "Reverse-engineered a legacy proc")).toBe(true);
+    expect(mentions("azure_functions", "an HTTP-triggered Azure Function")).toBe(true);
+    expect(mentions("mongodb", "a unique sparse index")).toBe(false);
+    expect(mentions("sql_server", "T-SQL reporting views")).toBe(false);
+  });
+
   it("flags an open gap that cites nothing while tagged facts exist, and a dangling reference", () => {
     const { issues } = computeHealth({
       facts,
@@ -172,6 +180,18 @@ describe("health checks", () => {
     });
     const kinds = issues.filter((i) => i.target.type === "application").map((i) => `${i.kind}:${i.target.id}`);
     expect(kinds.sort()).toEqual(["draft-closed-gap:f1", "draft-plan-stale:f1", "draft-stale-analysis:f1"]);
+  });
+
+  it("checks a variant's title line only against that variant's template", () => {
+    const header = (title) => ({ paragraphs: [{ text: "ARASH KESHTGAR", kind: "other" }, { text: title, kind: "other" }], sections: [] });
+    const { issues } = computeHealth({
+      facts: [
+        fact("identity.title_dotnet_azure", { claim: ".NET / Azure Developer", tags: ["header", "variant.dotnet_azure"] }),
+        fact("identity.title_powerplatform", { claim: "Power Platform Developer", tags: ["header", "variant.powerplatform"] }),
+      ],
+      templates: { anchors: [], variants: { dotnet_azure: header(".NET  /  Azure Developer"), powerplatform: header("Power Platform Developer") } },
+    });
+    expect(issues.filter((i) => i.kind === "template-identity-drift")).toEqual([]);
   });
 
   it("hides dismissed issues and sorts errors first", () => {

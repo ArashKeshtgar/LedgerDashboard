@@ -24,12 +24,17 @@ const GENERIC_TAGS = new Set(
 // tag ("nosql-experience" vs facts tagged mongodb).
 const SLUG_TOKEN_ALIASES = { nosql: ["mongodb"], cicd: ["github_actions"], k8s: ["kubernetes"] };
 
-const spellings = (tag) => [
-  tag.replace(/_/g, " "),
-  tag.replace(/_/g, ""),
-  tag.replace(/_/g, "-"),
-  tag.replace(/_/g, "."),
-];
+// The tag's last word is also tried without its inflection, so a claim
+// saying "stored procedure", "Azure Function" or "Reverse-engineered"
+// counts as naming stored_procedures / azure_functions / reverse_engineering.
+const stemLast = (tag) => tag.replace(/([a-z]{4,}?)(?:ing|es|ed|s)$/, "$1");
+const spellings = (tag) =>
+  [tag, stemLast(tag)].flatMap((t) => [
+    t.replace(/_/g, " "),
+    t.replace(/_/g, ""),
+    t.replace(/_/g, "-"),
+    t.replace(/_/g, "."),
+  ]);
 export const mentions = (tag, text) => {
   const t = String(text || "").toLowerCase();
   return spellings(tag.toLowerCase()).some((s) => t.includes(s));
@@ -140,6 +145,9 @@ export function computeHealth({
       }
       const header = squash(doc.paragraphs.slice(0, 6).map((p) => p.text).join(" "));
       for (const f of identity) {
+        // A variant-tagged line (the job title) belongs to that template only.
+        const forVariants = f.tags.filter((t) => t.startsWith("variant.")).map((t) => t.slice("variant.".length));
+        if (forVariants.length && !forVariants.includes(variant)) continue;
         if (!header.includes(squash(f.claim))) {
           add({
             severity: "warn", kind: "template-identity-drift", target: { type: "template", id: `${variant}:${f.id}` },

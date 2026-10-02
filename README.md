@@ -31,6 +31,10 @@ npm run build
 - **Hiring contact & email follow-up**: marking an application as sent first asks who you applied to (name, email, and where the email came from) — the moment the posting and the ATS confirmation are in front of you. **Only published or verified addresses are stored**: an email must come from the posting, the ATS confirmation's reply-to, or the person writing to you; one you found yourself must be marked as checked. A guessed `careers@` / `firstname@` is refused by the API and by a CHECK constraint in the database. After 7 days without a reply, **✉️ Email follow-up** opens a short, polite draft in your own mail app (nothing is sent from the dashboard); confirming it logs the follow-up and restarts the 7-day clock.
 - **Stats**: match-score distribution, sources, and the gap analysis, including which gaps show up in rejections.
 - **Recruiters**: the LinkedIn outreach list with daily/weekly send targets.
+- **Truth Bank** (`/truth`): every fact in `facts/*.yml`, grouped by project/role, with the gaps it's evidence for and the built résumés that used it. Add, edit or remove facts here: a save rewrites only that fact's lines (comments and every other entry stay byte-for-byte), is parsed back and compared before the file is written, and is committed to the engine folder's local git repo — 🕘 shows any fact's history as diffs.
+- **Gaps** (`/gaps`): the gap dictionary with each gap's status, the facts it cites as evidence, and the postings tagged with it (drafts / sent / rejected). Status is read from the label's own wording ("بسته شد" closed, plus "همچنان/باقی/هنوز" partial) — the same rule as the Context engine's `#G:` tags.
+- **Résumé** (`/resume`): the base templates as the engine reads them (via `engine/inspect_resume.py`, which reuses `build.py`'s section logic), a sections × templates matrix, and every built résumé with each bullet linked to the fact it was written from (`plan.json`, saved with each build).
+- **Health** (`/health`, badge in the navbar): where the truth bank, gap dictionary, templates and drafts disagree — a technology tag the claim never names (the model only reads claims), an open gap with tagged evidence but no citation, a label citing a fact that no longer exists, template skills/header lines out of date, drafts analyzed before the truth bank changed (exact, via a fingerprint in `analysis.json`), drafts still tagged with closed gaps, built drafts whose facts changed since, and truth-bank files edited outside the dashboard. Drafts can be re-analyzed one by one or all at once (`POST /api/packages/reanalyze`); a check can be dismissed (kept in `health_dismissed.yml`).
 
 ### Why the AI can't invent claims
 
@@ -85,7 +89,9 @@ The server suite runs the real Express app against a temporary copy of the data 
 | `facts/*.yml` | the fact bank the résumé engine may draw from |
 | `companies.yml` | past companies, for the duplicate-application check |
 | `target_list.csv` | the recruiter outreach list |
-| `applications/<folder>/` | posting, Match Report, Interview Questions, résumé/cover letter files |
+| `applications/<folder>/` | posting, `analysis.json` (gaps + truth-bank fingerprint), `plan.json` (fact behind every bullet), Match Report, Interview Questions, résumé/cover letter files |
+| `health_dismissed.yml` | Health checks you chose to hide |
+| `.git` | local-only history of `facts/`, `gap_tags.yml`, `templates/` (no remote) — every dashboard save is a commit |
 
 `motivation.yml` (in this folder) holds the daily line at the top of every page. One quote is picked per day, by date, so it stays put until midnight.
 

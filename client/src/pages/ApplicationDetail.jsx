@@ -945,7 +945,14 @@ export default function ApplicationDetail() {
 
       {app.files && app.files.length > 0 && (
         <div className="card mb-4">
-          <div className="card-header">Files in application folder</div>
+          <div className="card-header d-flex justify-content-between align-items-center">
+            <span>Files in application folder</span>
+            {packageBuilt && (
+              <Link to={`/resume/${encodeURIComponent(app.folder)}`} className="btn btn-sm btn-outline-primary rounded-pill">
+                📄 View résumé — bullets linked to facts
+              </Link>
+            )}
+          </div>
           <ul className="list-group list-group-flush">
             {app.files.map((f) => (
               <li key={f} className="list-group-item">{f}</li>

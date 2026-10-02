@@ -192,3 +192,45 @@ export async function undoApplicationStage(folder, all = false) {
   }
   return res.json();
 }
+
+// --- Truth Bank / Gaps / Résumé / Health -----------------------------------
+
+// Throws the server's message, with its validation details attached.
+async function request(method, url, body) {
+  const res = await fetch(`${API_BASE}${url}`, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || `${method} ${url} failed (${res.status})`);
+    err.details = data.details;
+    throw err;
+  }
+  return data;
+}
+
+export const fetchTruthBank = () => request("GET", "/api/truth-bank");
+export const createFact = (fact, note) => request("POST", "/api/truth-bank/facts", { fact, note });
+export const updateFact = (id, fact, note) =>
+  request("PUT", `/api/truth-bank/facts/${encodeURIComponent(id)}`, { fact, note });
+export const deleteFact = (id) => request("DELETE", `/api/truth-bank/facts/${encodeURIComponent(id)}`);
+export const fetchHistory = (q) =>
+  request("GET", `/api/truth-bank/history${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+export const fetchCommit = (hash) => request("GET", `/api/truth-bank/history/${encodeURIComponent(hash)}`);
+export const commitOutsideEdits = (message) => request("POST", "/api/truth-bank/commit", { message });
+
+export const fetchGaps = () => request("GET", "/api/gaps");
+export const createGap = (slug, label) => request("POST", "/api/gaps", { slug, label });
+export const updateGap = (slug, label, note) =>
+  request("PUT", `/api/gaps/${encodeURIComponent(slug)}`, { label, note });
+
+export const fetchResumeTemplates = () => request("GET", "/api/resume/templates");
+export const fetchBuiltResume = (folder) =>
+  request("GET", `/api/applications/${encodeURIComponent(folder)}/resume`);
+
+export const fetchHealth = () => request("GET", "/api/health");
+export const dismissHealthIssue = (key) => request("POST", "/api/health/dismiss", { key });
+export const restoreHealthIssues = () => request("DELETE", "/api/health/dismiss");
+export const fetchResumeBuilds = () => request("GET", "/api/resume/builds");

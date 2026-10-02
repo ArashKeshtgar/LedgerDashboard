@@ -889,3 +889,96 @@ body {
   opacity: 0.7;
   margin-left: 2px;
 }
+
+/* ---- Truth Bank / Gaps / Résumé / Health ---- */
+.navbar-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.fact-card {
+  border-left: 3px solid transparent;
+}
+.fact-card.fact-warn {
+  border-left-color: var(--bs-warning);
+}
+.fact-card.fact-error {
+  border-left-color: var(--bs-danger);
+}
+.fact-highlight {
+  background-color: var(--bs-primary-bg-subtle) !important;
+  transition: background-color 0.6s ease;
+}
+.fact-link {
+  font-family: var(--bs-font-monospace);
+  font-weight: 400;
+  text-decoration: none;
+}
+.fact-link:hover {
+  border-color: var(--bs-primary) !important;
+}
+.gaps-table td {
+  vertical-align: top;
+}
+.diff-view {
+  background: var(--bs-tertiary-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.diff-add {
+  background: rgba(25, 135, 84, 0.12);
+}
+.diff-del {
+  background: rgba(220, 53, 69, 0.12);
+}
+.diff-hunk {
+  color: var(--bs-secondary-color);
+}
+.resume-sheet {
+  max-width: 820px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.resume-top:first-child {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.resume-top {
+  text-align: center;
+}
+.resume-heading {
+  margin: 1.1rem 0 0.4rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid var(--border-soft);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.resume-section {
+  margin-top: 0.7rem;
+}
+.resume-subheader {
+  color: var(--bs-secondary-color);
+  font-style: italic;
+}
+.resume-bullets {
+  margin-bottom: 0.3rem;
+  padding-left: 1.2rem;
+}
+.resume-bullets li {
+  margin-bottom: 0.2rem;
+}
+.resume-skill {
+  list-style: none;
+  margin-left: -1.2rem;
+}
+.resume-other {
+  margin-top: 0.3rem;
+}
+tr.fact-highlight > td {
+  background-color: var(--bs-primary-bg-subtle);
+}

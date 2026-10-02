@@ -14,6 +14,8 @@ import { slugify, todayISO, weekStartISO, ISO_DATE_RE } from "./text.js";
 import { RECRUITER_DATE_FIELDS } from "./stores/shape.js";
 import { CONTACT_FIELDS, ContactValidationError, resolveContact } from "./contact.js";
 import { isStoreValidationError } from "./stores/sqlStore.js";
+import { registerTruthRoutes } from "./truthRoutes.js";
+import { bankFingerprint, readFacts } from "./truthBank.js";
 
 const VALIDATE_TIMEOUT_MS = 30_000;
 // LibreOffice's docx -> pdf conversion is the slow part of a build.
@@ -572,6 +574,27 @@ export function createApp(cfg, deps = {}) {
     };
   }
 
+  // The analysis as it was scored, next to the posting: the full gap
+  // sentences (the row only keeps slugs) and a fingerprint of the truth bank
+  // it was scored against, so Health can tell exactly when it went stale.
+  function saveAnalysis(folder, analysis) {
+    const record = {
+      analyzed_at: new Date().toISOString(),
+      bank_fingerprint: bankFingerprint(FACTS_DIR, GAP_TAGS_PATH),
+      match_score: analysis.match_score,
+      base_variant: analysis.base_variant,
+      recommendation: analysis.recommendation,
+      reasoning: analysis.reasoning,
+      gaps: analysis.gaps,
+      gap_tags: analysis.gap_tags,
+    };
+    writeFileSync(
+      path.join(resolveApplicationFolder(APPLICATIONS_DIR, folder), "analysis.json"),
+      JSON.stringify(record, null, 2),
+      "utf-8"
+    );
+  }
+
   // One scoring call against the fact bank and gap dictionary as they are
   // right now. Shared by /analyze (a new posting) and /reanalyze (a posting
   // scored before newer evidence landed — a row's gap_tags are a snapshot).
@@ -633,6 +656,7 @@ export function createApp(cfg, deps = {}) {
         gap_tags: analysis.gap_tags.join(","),
       });
       writeFileSync(path.join(APPLICATIONS_DIR, folder, "posting.txt"), postingText, "utf-8");
+      saveAnalysis(folder, analysis);
       const createdRow = await withPipelineFor(folder);
 
       res.json({
@@ -676,6 +700,7 @@ export function createApp(cfg, deps = {}) {
         match_score: analysis.match_score,
         gap_tags: analysis.gap_tags.join(","),
       });
+      saveAnalysis(folder, analysis);
       res.json({
         ...analysis,
         previous: { match_score: row.match_score, gap_tags: row.gap_tags },
@@ -911,15 +936,36 @@ export function createApp(cfg, deps = {}) {
       const build = await runProcess(python, [path.join(ENGINE_DIR, "build.py"), planPath, folderPath], {
         timeoutMs: cfg.buildTimeoutMs ?? BUILD_TIMEOUT_MS,
       });
-      unlinkSync(planPath);
 
       if (build.status !== 0) {
+        unlinkSync(planPath);
         return res.status(build.timedOut ? 504 : 500).json({
           error: build.timedOut ? "build.py timed out" : "build.py failed",
           folder,
           details: (build.stdout || build.stderr || "").split("\n").filter(Boolean),
         });
       }
+
+      // Which fact every bullet and skills line came from, and what each
+      // fact said at build time — the Résumé view links bullets back to the
+      // truth bank, and Health flags a draft whose facts changed since.
+      const plan = JSON.parse(readFileSync(planPath, "utf-8"));
+      const usedIds = [...new Set([...(plan.bullets || []).map((b) => b.fact_id), ...(plan.skill_ids || [])])];
+      const current = new Map(readFacts(FACTS_DIR).facts.map((f) => [f.id, f.claim]));
+      writeFileSync(
+        path.join(folderPath, "plan.json"),
+        JSON.stringify(
+          {
+            built_at: new Date().toISOString(),
+            ...plan,
+            facts_used: Object.fromEntries(usedIds.map((id) => [id, current.get(id) ?? null])),
+          },
+          null,
+          2
+        ),
+        "utf-8"
+      );
+      unlinkSync(planPath);
 
       writeFileSync(path.join(folderPath, "Match_Report.md"), generated.match_report_markdown, "utf-8");
       writeFileSync(
@@ -1084,6 +1130,8 @@ export function createApp(cfg, deps = {}) {
       sendError(res, err);
     }
   });
+
+  registerTruthRoutes(app, { cfg, store, withPipeline, sendError, engineDir: ENGINE_DIR, git: deps.engineGit });
 
   // Serve the built React app (so no dev server / Vite is needed to use this)
   if (existsSync(cfg.clientDist)) {

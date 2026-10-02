@@ -10,6 +10,10 @@ import NewPackage from "./pages/NewPackage.jsx";
 import PipelineBoard from "./pages/PipelineBoard.jsx";
 import StatsPage from "./pages/StatsPage.jsx";
 import RecruitersBoard from "./pages/RecruitersBoard.jsx";
+import TruthBankPage from "./pages/TruthBankPage.jsx";
+import GapsPage from "./pages/GapsPage.jsx";
+import ResumePage, { BuiltResumePage } from "./pages/ResumePage.jsx";
+import HealthPage from "./pages/HealthPage.jsx";
 
 export default function App() {
   return (
@@ -29,6 +33,11 @@ export default function App() {
                 <Route path="/pipeline" element={<PipelineBoard />} />
                 <Route path="/stats" element={<StatsPage />} />
                 <Route path="/recruiters" element={<RecruitersBoard />} />
+                <Route path="/truth" element={<TruthBankPage />} />
+                <Route path="/gaps" element={<GapsPage />} />
+                <Route path="/resume" element={<ResumePage />} />
+                <Route path="/resume/:folder" element={<BuiltResumePage />} />
+                <Route path="/health" element={<HealthPage />} />
               </Routes>
             </div>
           </main>

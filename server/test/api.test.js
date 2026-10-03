@@ -271,6 +271,30 @@ describe("resume engine", () => {
     expect(bad.status).toBe(400);
   });
 
+  it("drops gap tags the dictionary marks closed from the nightly estimate", async () => {
+    const dictPath = path.join(data.engine, "gap_tags.yml");
+    writeFileSync(
+      dictPath,
+      "etl-ssis: ETL with SSIS\n" +
+        "app-security: امنیت — بسته شد ۲۶ سپتامبر\n" +
+        "containers-orchestration: Docker/K8s — کامل بسته شد\n" +
+        "azure-devops: Azure DevOps — بسته شد ولی YAML هنوز نه\n"
+    );
+    server = await start(testConfig(data.root, { aiScriptCalls: "none" }));
+    const res = await server.call("POST", "/api/applications", {
+      body: {
+        company: "Initech", role: "Dev", postingText: "C#", match_score: 70, variant: "dotnet_azure",
+        gap_tags: ["containers-orchestration", "app-security", "azure-devops", "etl-ssis"],
+      },
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.droppedClosedGaps).toEqual(["containers-orchestration", "app-security"]);
+    const row = await (await server.call("GET", `/api/applications/${body.folder}`)).json();
+    expect(row.gap_tags).toBe("azure-devops,etl-ssis");
+    expect(row.analysis.gap_tags).toEqual(["azure-devops", "etl-ssis"]);
+  });
+
   it("AI_SCRIPT_CALLS=analyze lets scripts analyze but not build", async () => {
     const anthropic = fakeAnthropic(() => ({
       base_variant: "dotnet_azure", match_score: 70, recommendation: "apply",

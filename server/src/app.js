@@ -308,7 +308,14 @@ export function createApp(cfg, deps = {}) {
       if (variant && !variants.includes(variant)) {
         return res.status(400).json({ error: `variant must be one of ${variants.join(", ")}` });
       }
-      const tags = toGapTagList(gap_tags);
+      // A closed gap is closed whoever scored the posting: the nightly
+      // search's prompt says so too, but it once tagged a draft with two
+      // closed slugs anyway, so the dictionary is enforced here.
+      const dict = loadGapTagsDict();
+      const isClosed = (t) => dict[t] != null && gapStatus(String(dict[t])) === "closed";
+      const allTags = toGapTagList(gap_tags);
+      const tags = allTags.filter((t) => !isClosed(t));
+      const droppedClosedGaps = allTags.filter(isClosed);
 
       const folder = await createApplicationRow({
         company, role, location, branch, source, posting_url, match_score, notes,
@@ -327,9 +334,10 @@ export function createApp(cfg, deps = {}) {
           reasoning: reasoning || "",
           gaps: Array.isArray(gaps) ? gaps.map(String) : [],
           gap_tags: tags,
+          ...(droppedClosedGaps.length ? { dropped_closed_gaps: droppedClosedGaps } : {}),
         });
       }
-      res.status(201).json(await withPipelineFor(folder));
+      res.status(201).json({ ...(await withPipelineFor(folder)), droppedClosedGaps });
     } catch (err) {
       sendError(res, err);
     }

@@ -103,7 +103,9 @@ export function loadConfig(env = process.env) {
     // intentionally never in the git repo — JOBSEARCH_DATA_DIR points there.
     jobsearchDir: env.JOBSEARCH_DATA_DIR || path.resolve(__dirname, "../../../JobSearch"),
     clientDist: path.resolve(__dirname, "../../client/dist"),
-    motivationPath: path.resolve(__dirname, "../../motivation.yml"),
+    // Inside server/ so the Docker image (COPY server) always carries it —
+    // at the repo root it was left out and the daily line silently vanished.
+    motivationPath: path.resolve(__dirname, "../motivation.yml"),
     store,
     db: {
       server: env.DB_SERVER || "localhost",

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { loadConfig } from "./src/config.js";
 import { createApp } from "./src/app.js";
+import { existsSync } from "fs";
 import { openStore } from "./src/stores/index.js";
 
 // loadConfig() throws on an unsafe setup (no password on a public HOST,
@@ -25,5 +26,8 @@ app.listen(cfg.port, cfg.host, () => {
   console.log(`  store:  ${cfg.store === "sql" ? `SQL Server ${cfg.db.server}/${cfg.db.database}` : "CSV files"}`);
   console.log(`  data:   ${cfg.jobsearchDir}`);
   console.log(`  client: ${cfg.clientDist}`);
+  if (!existsSync(cfg.motivationPath)) {
+    console.warn(`  WARNING: ${cfg.motivationPath} is missing — the daily line will not show.`);
+  }
   console.log("");
 });

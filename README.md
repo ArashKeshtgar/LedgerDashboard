@@ -93,7 +93,7 @@ The server suite runs the real Express app against a temporary copy of the data 
 | `health_dismissed.yml` | Health checks you chose to hide |
 | `.git` | local-only history of `facts/`, `gap_tags.yml`, `templates/` (no remote) — every dashboard save is a commit |
 
-`motivation.yml` (in this folder) holds the daily line at the top of every page. One quote is picked per day, by date, so it stays put until midnight.
+`server/motivation.yml` holds the daily line at the top of every page. One quote is picked per day, by date, so it stays put until midnight.
 
 ## SQL Server store (`STORE=sql`)
 

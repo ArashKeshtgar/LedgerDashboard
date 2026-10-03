@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 import { csvField, readCsv, toCsv, writeFileAtomic } from "../src/csv.js";
 import { isSafeFolderName, resolveApplicationFolder } from "../src/paths.js";
 import { attachPipeline, FOLLOWUP_THRESHOLD_DAYS } from "../src/pipeline.js";
@@ -257,5 +258,21 @@ describe("resolveContact (published or verified emails only)", () => {
     expect(resolveContact(current, { contact_name: "Jane Doe" })).toMatchObject({
       contact_name: "Jane Doe", contact_email: "jane@acme.com", contact_source: "ats_email",
     });
+  });
+});
+
+describe("motivation.yml", () => {
+  // The Docker image copies only client/ and server/; a quotes file outside
+  // server/ never reached production and the daily line silently vanished.
+  it("lives inside server/ and has enough distinct quotes", async () => {
+    const { load } = await import("js-yaml");
+    const cfg = loadConfig({});
+    const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+    expect(path.relative(serverDir, cfg.motivationPath).startsWith("..")).toBe(false);
+    const quotes = load(readFileSync(cfg.motivationPath, "utf-8")).quotes;
+    const texts = quotes.map((q) => q.text?.trim()).filter(Boolean);
+    expect(texts.length).toBe(quotes.length);
+    expect(new Set(texts).size).toBe(texts.length);
+    expect(texts.length).toBeGreaterThanOrEqual(60);
   });
 });

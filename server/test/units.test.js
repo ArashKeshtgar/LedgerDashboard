@@ -276,3 +276,25 @@ describe("motivation.yml", () => {
     expect(texts.length).toBeGreaterThanOrEqual(60);
   });
 });
+
+describe("similar postings", () => {
+  it("compares postings by stack, role and industry words only", async () => {
+    const { tokenize, similarTo } = await import("../src/similar.js");
+    expect(tokenize("We value diversity. Senior C# / ASP.NET Core dev with SQL Server and Power BI."))
+      .toEqual(["senior", "c#", "asp.net-core", "sql-server", "power-bi"]);
+    // plain English that is also a tech name stays out
+    expect(tokenize("Go the extra mile, rest assured, lead by example, excel at it")).toEqual([]);
+
+    const docs = [
+      { folder: "a", text: "C# .NET Core, Azure, SQL Server, React. Banking client." },
+      { folder: "b", text: "Senior .NET Core developer: C#, Azure, SQL Server, Angular. Banking." },
+      { folder: "c", text: "Service desk analyst: Active Directory, Windows, ticketing, ITIL." },
+      { folder: "d", text: "Help desk technician: Windows, Active Directory, ITIL, Office 365." },
+    ];
+    const res = similarTo("a", docs, { min: 0 });
+    expect(res[0].folder).toBe("b");
+    expect(res[0].shared).toEqual(expect.arrayContaining(["c#", "azure", "sql-server", "banking"]));
+    expect(res.find((r) => r.folder === "c")?.similarity ?? 0).toBeLessThan(res[0].similarity);
+    expect(similarTo("missing", docs)).toEqual([]);
+  });
+});

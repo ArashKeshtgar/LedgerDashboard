@@ -20,6 +20,7 @@ import { TrackBadge } from "../components/TrackBadge.jsx";
 import { trackOf } from "../track.js";
 import SaveToPcButton from "../components/SaveToPcButton.jsx";
 import PackageCostCard from "../components/PackageCostCard.jsx";
+import SimilarPostingsCard from "../components/SimilarPostingsCard.jsx";
 
 // Pipeline event dates are usually a plain YYYY-MM-DD, but the "Record a
 // stage update" form can attach a time too ("...T14:30") — show that as a
@@ -938,6 +939,8 @@ export default function ApplicationDetail() {
           </div>
         </div>
       )}
+
+      <SimilarPostingsCard folder={app.folder} stageLabels={stageLabels} />
 
       {app.matchReport && (
         <div className="card mb-4">

@@ -92,6 +92,20 @@ describe("applications are addressed by folder, not row position", () => {
     expect(rows.map((r) => r.id)).toEqual([FOLDER_A, FOLDER_B]);
   });
 
+  it("lists earlier postings like this one with how each went", async () => {
+    const write = (f, t) => writeFileSync(path.join(data.engine, "applications", f, "posting.txt"), t);
+    write(FOLDER_A, "Senior C# .NET Core developer, Azure, SQL Server, React, banking.");
+    write(FOLDER_B, "Senior C# .NET Core developer for a banking client: Azure, SQL Server, Angular.");
+    const res = await server.call("GET", `/api/applications/${FOLDER_A}/similar`);
+    expect(res.status).toBe(200);
+    const list = await res.json();
+    expect(list).toEqual([
+      expect.objectContaining({ folder: FOLDER_B, company: "Globex", role: "Data Engineer", stage: expect.any(String) }),
+    ]);
+    expect(list[0].similarity).toBeGreaterThan(0.4);
+    expect((await server.call("GET", "/api/applications/nope/similar")).status).toBe(404);
+  });
+
   it("serves a file from the folder as a download, and only files listed there", async () => {
     writeFileSync(path.join(data.engine, "applications", FOLDER_A, "CoverLetter.md"), "Dear team");
     const res = await server.call("GET", `/api/applications/${FOLDER_A}/files/CoverLetter.md`);

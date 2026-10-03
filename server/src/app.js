@@ -7,6 +7,7 @@ import path from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { FileLockedError } from "./csv.js";
 import { monthUsage, readUsage, recordUsage, summarize, usageRecord } from "./aiUsage.js";
+import { readPostings, similarTo } from "./similar.js";
 import { isSafeFolderName, resolveApplicationFolder, UnsafeFolderError } from "./paths.js";
 import { attachPipeline, FOLLOWUP_KEY } from "./pipeline.js";
 import { passwordMatches, createLoginLimiter, originGuard } from "./security.js";
@@ -456,6 +457,30 @@ export function createApp(cfg, deps = {}) {
         ...p, company: byFolder.get(p.folder)?.company || "", role: byFolder.get(p.folder)?.role || "",
       }));
       res.json({ ...usage, budget: cfg.aiMonthlyBudget });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // GET /api/applications/:id/similar - the other saved postings most like this one
+  // (by stack, role and industry) and how each went. Local, no model call.
+  app.get("/api/applications/:id/similar", async (req, res) => {
+    try {
+      const folder = req.params.id;
+      if (!(await findLedgerRow(folder))) return res.status(404).json({ error: "Not found" });
+      const matches = similarTo(folder, readPostings(APPLICATIONS_DIR), { limit: 5, min: 0.4 });
+      const rows = new Map((await withPipeline(await store.listApplications())).map((r) => [r.folder, r]));
+      res.json(
+        matches
+          .filter((m) => rows.has(m.folder)) // a folder whose row was deleted
+          .map((m) => {
+            const r = rows.get(m.folder);
+            return {
+              ...m, company: r.company, role: r.role, date: r.date, stage: r.stage,
+              isTerminal: r.isTerminal, match_score: r.match_score,
+            };
+          })
+      );
     } catch (err) {
       sendError(res, err);
     }

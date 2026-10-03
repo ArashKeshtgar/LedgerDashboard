@@ -132,6 +132,11 @@ export async function analyzePosting({ company, role, postingText, location, sou
   return body;
 }
 
+// One file of an application folder, served as a download.
+export function fileUrl(folder, name) {
+  return `${API_BASE}/api/applications/${encodeURIComponent(folder)}/files/${encodeURIComponent(name)}`;
+}
+
 export async function deleteApplication(id) {
   const res = await fetch(`${API_BASE}/api/applications/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) {

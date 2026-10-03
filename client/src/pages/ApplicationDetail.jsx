@@ -10,6 +10,7 @@ import {
   buildPackage,
   reanalyzePackage,
   deleteApplication,
+  fileUrl,
 } from "../api.js";
 import StageTimeline from "../components/StageTimeline.jsx";
 import ContactCard from "../components/ContactCard.jsx";
@@ -17,6 +18,7 @@ import ContactEditor from "../components/ContactEditor.jsx";
 import { daysUntilFollowup, followupMailto } from "../contact.js";
 import { TrackBadge } from "../components/TrackBadge.jsx";
 import { trackOf } from "../track.js";
+import SaveToPcButton from "../components/SaveToPcButton.jsx";
 
 // Pipeline event dates are usually a plain YYYY-MM-DD, but the "Record a
 // stage update" form can attach a time too ("...T14:30") — show that as a
@@ -962,15 +964,20 @@ export default function ApplicationDetail() {
         <div className="card mb-4">
           <div className="card-header d-flex justify-content-between align-items-center">
             <span>Files in application folder</span>
-            {packageBuilt && (
-              <Link to={`/resume/${encodeURIComponent(app.folder)}`} className="btn btn-sm btn-outline-primary rounded-pill">
-                📄 View résumé — bullets linked to facts
-              </Link>
-            )}
+            <div className="d-flex align-items-start gap-2">
+              {packageBuilt && (
+                <Link to={`/resume/${encodeURIComponent(app.folder)}`} className="btn btn-sm btn-outline-primary rounded-pill">
+                  📄 View résumé — bullets linked to facts
+                </Link>
+              )}
+              <SaveToPcButton folder={app.folder} files={app.files} />
+            </div>
           </div>
           <ul className="list-group list-group-flush">
             {app.files.map((f) => (
-              <li key={f} className="list-group-item">{f}</li>
+              <li key={f} className="list-group-item">
+                <a href={fileUrl(app.folder, f)} download={f}>{f}</a>
+              </li>
             ))}
           </ul>
         </div>

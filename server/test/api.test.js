@@ -92,6 +92,21 @@ describe("applications are addressed by folder, not row position", () => {
     expect(rows.map((r) => r.id)).toEqual([FOLDER_A, FOLDER_B]);
   });
 
+  it("serves a file from the folder as a download, and only files listed there", async () => {
+    writeFileSync(path.join(data.engine, "applications", FOLDER_A, "CoverLetter.md"), "Dear team");
+    const res = await server.call("GET", `/api/applications/${FOLDER_A}/files/CoverLetter.md`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toContain("attachment");
+    expect(await res.text()).toBe("Dear team");
+
+    const missing = await server.call("GET", `/api/applications/${FOLDER_A}/files/nope.pdf`);
+    expect(missing.status).toBe(404);
+    const escape = await server.call("GET", `/api/applications/${FOLDER_A}/files/..%2F..%2Fledger.csv`);
+    expect(escape.status).toBe(404);
+    const otherRow = await server.call("GET", `/api/applications/not-a-folder/files/CoverLetter.md`);
+    expect(otherRow.status).toBe(404);
+  });
+
   it("deletes exactly the requested row and its folder", async () => {
     const res = await server.call("DELETE", `/api/applications/${FOLDER_B}`);
     expect(res.status).toBe(200);

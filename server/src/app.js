@@ -439,6 +439,22 @@ export function createApp(cfg, deps = {}) {
     }
   });
 
+  // GET /api/applications/:id/files/:name - one file from the folder, as a
+  // download. Builds run on the server, so this is how a package reaches the
+  // PC. Only names actually listed in the folder are served (no paths).
+  app.get("/api/applications/:id/files/:name", async (req, res) => {
+    try {
+      const { id: folder, name } = req.params;
+      if (!(await findLedgerRow(folder))) return res.status(404).json({ error: "Not found" });
+      const folderPath = resolveApplicationFolder(APPLICATIONS_DIR, folder);
+      const listed = existsSync(folderPath) ? readdirSync(folderPath) : [];
+      if (!listed.includes(name)) return res.status(404).json({ error: "No such file" });
+      res.download(path.join(folderPath, name), name);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
   // GET /api/gap-tags - the standard gap-tag dictionary (key -> description)
   app.get("/api/gap-tags", (req, res) => {
     try {

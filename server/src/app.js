@@ -1093,8 +1093,10 @@ export function createApp(cfg, deps = {}) {
       if (match_score !== undefined && match_score !== null && match_score !== "") {
         refreshedFields.match_score = match_score;
       }
+      // The page sends the tags it loaded, which can predate a fix made
+      // elsewhere — so closed slugs are filtered here too.
       if (gap_tags !== undefined && gap_tags !== null) {
-        refreshedFields.gap_tags = toGapTagList(gap_tags).join(",");
+        refreshedFields.gap_tags = withoutClosedGaps(toGapTagList(gap_tags)).kept.join(",");
       }
       await updateApplicationRowByFolder(folder, refreshedFields);
 

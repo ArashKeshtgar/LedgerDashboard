@@ -399,6 +399,20 @@ describe("resume engine", () => {
     expect(row.track).toBe("dev");
   });
 
+  it("build doesn't save a closed gap slug the page sent back", async () => {
+    writeFileSync(path.join(data.engine, "gap_tags.yml"), "etl-ssis: ETL\napp-security: JWT — بسته شد\n");
+    const anthropic = fakeAnthropic(() => packageInput);
+    server = await start(testConfig(data.root), { anthropic });
+    const res = await server.call("POST", "/api/packages/build", {
+      body: {
+        folder: FOLDER_A, company: "Acme", role: "Backend Developer",
+        postingText: "posting", base_variant: "dotnet_azure", gap_tags: ["app-security", "etl-ssis"],
+      },
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()).gap_tags).toBe("etl-ssis");
+  });
+
   it("marks a package built from the itsupport variant as the IT track", async () => {
     const anthropic = fakeAnthropic(() => packageInput);
     server = await start(testConfig(data.root), { anthropic });

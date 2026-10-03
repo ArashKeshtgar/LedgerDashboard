@@ -167,7 +167,12 @@ function itemSpans(lines) {
   return spans;
 }
 
-function writeChecked(filePath, text, check) {
+// Files are edited as LF lines; a file that used CRLF is written back as CRLF
+// throughout, instead of ending up with the spliced lines LF and the rest CRLF.
+const toLines = (src) => src.replace(/\r\n/g, "\n").split("\n");
+
+function writeChecked(filePath, text, check, src = "") {
+  if (src.includes("\r\n")) text = text.replace(/\n/g, "\r\n");
   const parsed = loadYaml(text) || [];
   check(parsed);
   writeFileSync(filePath, text, "utf-8");
@@ -190,7 +195,7 @@ export function saveFact(factsDir, { id, fact: input, create }) {
   const file = create ? fileForId(fact.id) : existing.file;
   const filePath = path.join(factsDir, file);
   const src = existsSync(filePath) ? readFileSync(filePath, "utf-8") : "";
-  const lines = src.split("\n");
+  const lines = toLines(src);
   const spans = itemSpans(lines);
   const rendered = renderFact(fact).split("\n");
 
@@ -213,7 +218,7 @@ export function saveFact(factsDir, { id, fact: input, create }) {
     if (parsed.length !== before.length + (create ? 1 : 0)) {
       throw new Error(`Saving ${fact.id} would have changed other facts in ${file} — nothing was written`);
     }
-  });
+  }, src);
   return { file, fact };
 }
 
@@ -223,7 +228,7 @@ export function deleteFact(factsDir, id) {
   if (!existing) throw new TruthBankError(`Unknown fact: ${id}`, 404);
   const filePath = path.join(factsDir, existing.file);
   const src = readFileSync(filePath, "utf-8");
-  const lines = src.split("\n");
+  const lines = toLines(src);
   const span = itemSpans(lines).find((s) => s.id === id);
   // Take one surrounding blank line with it, so no double gap is left behind.
   let { start, end } = span;
@@ -234,7 +239,7 @@ export function deleteFact(factsDir, id) {
     if (parsed.some((f) => f?.id === id) || parsed.length !== (loadYaml(src) || []).length - 1) {
       throw new Error(`Deleting ${id} would have changed other facts — nothing was written`);
     }
-  });
+  }, src);
   return { file: existing.file };
 }
 
@@ -268,7 +273,7 @@ export function saveGap(gapTagsPath, { slug, label, create }) {
   if (!create && !exists) throw new TruthBankError(`Unknown gap: ${slug}`, 404);
 
   const line = `${slug}: ${JSON.stringify(text)}`;
-  const lines = src.split("\n");
+  const lines = toLines(src);
   if (create) {
     while (lines.length && lines[lines.length - 1] === "") lines.pop();
     lines.push(line, "");
@@ -283,6 +288,6 @@ export function saveGap(gapTagsPath, { slug, label, create }) {
     if (parsed[slug] !== text) throw new Error(`Rendered YAML for ${slug} didn't read back the same — nothing was written`);
     const others = Object.keys(before).filter((k) => k !== slug);
     if (others.some((k) => parsed[k] !== before[k])) throw new Error("Saving would have changed other gaps — nothing was written");
-  });
+  }, src);
   return { slug, label: text };
 }

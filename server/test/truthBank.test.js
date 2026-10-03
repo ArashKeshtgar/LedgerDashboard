@@ -54,6 +54,15 @@ describe("truth bank file edits", () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
   const text = () => readFileSync(path.join(dir, "projects.yml"), "utf-8");
 
+  it("keeps a CRLF file all-CRLF when a fact is edited", () => {
+    writeFileSync(path.join(dir, "projects.yml"), PROJECTS.replace(/\n/g, "\r\n"));
+    saveFact(dir, { id: "proj.alpha.two", fact: fact("proj.alpha.two", { claim: "Second alpha fact, edited.", strength: "medium", tags: ["proj.alpha"] }) });
+    const after = text();
+    expect(after).toContain("Second alpha fact, edited.");
+    expect(after.replace(/\r\n/g, "")).not.toContain("\n");
+    expect(readFacts(dir).facts).toHaveLength(3);
+  });
+
   it("edits one fact and leaves every other line of the file untouched", () => {
     saveFact(dir, { id: "proj.alpha.two", fact: fact("proj.alpha.two", { claim: "Second alpha fact, now with MongoDB.", strength: "medium", tags: ["proj.alpha", "mongodb"] }) });
     const after = text();

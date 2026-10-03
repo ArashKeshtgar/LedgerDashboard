@@ -401,8 +401,8 @@ describe("analyze prompt", () => {
     }));
     const server = await startApp(testConfig(data.root), { anthropic });
     await server.call("POST", "/api/packages/analyze", { body: { company: "X", role: "Dev", postingText: "AngularJS" } });
-    expect(anthropic.calls[0].system).toContain("- frontend-modern [CLOSED]:");
-    expect(anthropic.calls[0].system).toContain("- etl-ssis [OPEN]:");
+    expect(anthropic.calls[0].system.map((b) => b.text).join(" ")).toContain("- frontend-modern [CLOSED]:");
+    expect(anthropic.calls[0].system.map((b) => b.text).join(" ")).toContain("- etl-ssis [OPEN]:");
     await server.close();
     data.cleanup();
   });

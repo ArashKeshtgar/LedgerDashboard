@@ -291,20 +291,43 @@ export function createApp(cfg, deps = {}) {
   // source?, posting_url?, match_score?, notes?, postingText? }
   // postingText is saved as posting.txt, so the draft can be analyzed later
   // from its page — how the nightly search saves postings without spending
-  // API credit on them.
+  // API credit on them. The nightly search scores postings itself (its own
+  // session, not API credit) and sends that estimate along: variant, gap_tags,
+  // and optionally gaps + reasoning, kept in analysis.json marked as an
+  // estimate. A click on Analyze in the app replaces it with the engine's score.
   app.post("/api/applications", async (req, res) => {
     try {
-      const { company, role, location, branch, source, posting_url, match_score, notes, postingText } =
-        req.body || {};
+      const {
+        company, role, location, branch, source, posting_url, match_score, notes, postingText,
+        variant, gap_tags, gaps, reasoning,
+      } = req.body || {};
       if (!company || !role) {
         return res.status(400).json({ error: "company and role are required" });
       }
+      const variants = ANALYZE_TOOL.input_schema.properties.base_variant.enum;
+      if (variant && !variants.includes(variant)) {
+        return res.status(400).json({ error: `variant must be one of ${variants.join(", ")}` });
+      }
+      const tags = toGapTagList(gap_tags);
 
       const folder = await createApplicationRow({
         company, role, location, branch, source, posting_url, match_score, notes,
+        variant, gap_tags: tags.join(","),
       });
       if (postingText) {
         writeFileSync(path.join(APPLICATIONS_DIR, folder, "posting.txt"), postingText, "utf-8");
+      }
+      if (variant && postingText) {
+        const score = Math.round(Number(match_score));
+        saveAnalysis(folder, {
+          source: "nightly-estimate",
+          match_score: Number.isFinite(score) ? Math.min(100, Math.max(0, score)) : null,
+          base_variant: variant,
+          recommendation: null,
+          reasoning: reasoning || "",
+          gaps: Array.isArray(gaps) ? gaps.map(String) : [],
+          gap_tags: tags,
+        });
       }
       res.status(201).json(await withPipelineFor(folder));
     } catch (err) {
@@ -391,6 +414,7 @@ export function createApp(cfg, deps = {}) {
       let matchReport = null;
       let interviewQuestions = null;
       let postingText = null;
+      let analysis = null;
       const folderPath = resolveApplicationFolder(APPLICATIONS_DIR, row.folder);
       if (existsSync(folderPath)) {
         files = readdirSync(folderPath);
@@ -401,9 +425,14 @@ export function createApp(cfg, deps = {}) {
         matchReport = read("Match_Report.md");
         interviewQuestions = read("Interview_Questions.md");
         postingText = read("posting.txt");
+        try {
+          analysis = JSON.parse(read("analysis.json") || "null");
+        } catch {
+          analysis = null; // a hand-edited, broken file just means no analysis shown
+        }
       }
 
-      res.json({ ...row, files, matchReport, interviewQuestions, postingText });
+      res.json({ ...row, files, matchReport, interviewQuestions, postingText, analysis });
     } catch (err) {
       sendError(res, err);
     }
@@ -585,6 +614,9 @@ export function createApp(cfg, deps = {}) {
   // it was scored against, so Health can tell exactly when it went stale.
   function saveAnalysis(folder, analysis) {
     const record = {
+      // "engine" = scored here by Claude; "nightly-estimate" = sent by the
+      // nightly search, which scored it in its own session.
+      source: analysis.source || "engine",
       analyzed_at: new Date().toISOString(),
       bank_fingerprint: bankFingerprint(FACTS_DIR, GAP_TAGS_PATH),
       match_score: analysis.match_score,
@@ -599,6 +631,28 @@ export function createApp(cfg, deps = {}) {
       JSON.stringify(record, null, 2),
       "utf-8"
     );
+  }
+
+  // The fact bank is ~35k tokens and identical across calls, so the system
+  // prompt (and the tools before it) is marked for prompt caching: a second
+  // analyze/build within a few minutes reads it at ~10% of the price. `tail`
+  // is the per-request part, kept after the breakpoint so it doesn't split
+  // the cache.
+  // One line per Claude call in the server log, so where the credit goes
+  // (and whether the cache is hit) can be read back later.
+  function logUsage(kind, message) {
+    const u = message?.usage;
+    if (!u) return;
+    console.log(
+      `[claude] ${kind} in=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} ` +
+        `cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens}`
+    );
+  }
+
+  function cachedSystem(text, tail = "") {
+    const blocks = [{ type: "text", text, cache_control: { type: "ephemeral" } }];
+    if (tail) blocks.push({ type: "text", text: tail });
+    return blocks;
   }
 
   // One scoring call against the fact bank and gap dictionary as they are
@@ -625,7 +679,7 @@ export function createApp(cfg, deps = {}) {
     const message = await client.messages.create({
       model: "claude-sonnet-5",
       max_tokens: 4096,
-      system:
+      system: cachedSystem(
         "You are scoring how well a job posting matches a candidate, using ONLY the facts " +
         "listed below — never invent experience, numbers or skills not in this list. " +
         "Call submit_analysis with your result. The fact bank is the source of truth: if a " +
@@ -635,13 +689,15 @@ export function createApp(cfg, deps = {}) {
         "coin a new short kebab-case slug when it doesn't). Never put a [CLOSED] slug in " +
         "gap_tags: the candidate has that evidence. If a narrower part of it is still missing " +
         "for this posting (e.g. legacy AngularJS when modern Angular is closed), coin a more " +
-        "specific slug for exactly that part instead:\n" + gapTagsSummary,
+        "specific slug for exactly that part instead:\n" + gapTagsSummary
+      ),
       messages: [
         { role: "user", content: `Job posting for ${role} at ${company}:\n\n${postingText}` },
       ],
       tools: [ANALYZE_TOOL],
       tool_choice: { type: "tool", name: "submit_analysis" },
     });
+    logUsage("analyze", message);
     return normalizeAnalysis(message);
   }
 
@@ -845,7 +901,7 @@ export function createApp(cfg, deps = {}) {
       const request = {
         model: "claude-sonnet-5",
         max_tokens: 8192,
-        system:
+        system: cachedSystem(
           "You are building a tailored job application package using ONLY the fact bank below. " +
           "Rules: every bullet must cite a real fact_id from the bank; any number you write in a " +
           "bullet must be exactly one of that fact's allowed_numbers (or omit numbers entirely); " +
@@ -873,11 +929,12 @@ export function createApp(cfg, deps = {}) {
               "applications fail), include at most 1-2 short project sections, and never claim a " +
               "certification — the candidate has none.\n\n"
             : "") +
-          (caveats
-            ? "The candidate has real gaps for this posting — address them honestly in the " +
-              "cover letter rather than hiding them.\n\n"
-            : "") +
           "FACT BANK (JSON lines):\n" + factDetail,
+          caveats
+            ? "The candidate has real gaps for this posting — address them honestly in the " +
+              "cover letter rather than hiding them."
+            : ""
+        ),
         messages: [
           {
             role: "user",
@@ -901,6 +958,7 @@ export function createApp(cfg, deps = {}) {
       let validation;
       for (let attempt = 0; attempt < 2; attempt++) {
         const message = await client.messages.create(request);
+        logUsage("build", message);
         const toolUse = message.content.find((b) => b.type === "tool_use");
         if (!toolUse) throw new Error("Model did not return a structured package");
         generated = toolUse.input;

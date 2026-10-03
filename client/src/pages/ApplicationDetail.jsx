@@ -339,7 +339,7 @@ export default function ApplicationDetail() {
     setReanalyzing(true);
     try {
       const result = await reanalyzePackage(app.folder);
-      setApp((a) => ({ ...a, ...result.application }));
+      setApp((a) => ({ ...a, ...result.application, analysis: { ...a.analysis, source: "engine" } }));
       setReanalyzeResult(result);
     } catch (e) {
       setReanalyzeError(e.message);
@@ -438,6 +438,8 @@ export default function ApplicationDetail() {
   // Saved by the nightly search without a Claude call: there's no variant to
   // build with until it's analyzed, which only happens when you click.
   const unscored = !app.variant;
+  // Scored by the nightly search in its own session, not by the engine.
+  const estimated = !unscored && app.analysis?.source === "nightly-estimate";
   const offerBuild = !unscored && (!packageBuilt || showRebuild);
 
   const waitingKeys = new Set((stages.stages || []).filter((s) => s.waiting).map((s) => s.key));
@@ -467,6 +469,8 @@ export default function ApplicationDetail() {
             <span>
               {unscored
                 ? "🕒 Saved without a score — no API credit has been spent on it yet. Analyze it if it looks worth it; building comes after that, also only when you click."
+                : estimated && !packageBuilt
+                ? `🌙 ${app.match_score}% is the nightly search's estimate (no API credit spent). You can build from it, or click Analyze first for the engine's exact score.`
                 : packageBuilt
                 ? "📦 The package is built but not sent yet — review the files below, send the application, then mark it as sent. Until then it won't show up on the Pipeline or count in Stats."
                 : "📝 This package hasn't been sent yet — it won't show up on the Pipeline or count in Stats until you decide. Nothing gets built until you say so."}
@@ -483,6 +487,8 @@ export default function ApplicationDetail() {
                   ? "Analyzing…"
                   : unscored
                   ? "🤖 Analyze — score it (uses API credit)"
+                  : estimated
+                  ? "🤖 Analyze — exact score (uses API credit)"
                   : "🔄 Re-analyze gaps"}
               </button>
               <button

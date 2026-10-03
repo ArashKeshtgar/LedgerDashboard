@@ -211,8 +211,9 @@ describe("resume engine", () => {
     expect(body.application.match_score).toBe("80");
     expect(body.application.variant).toBe("dotnet_azure");
     expect(anthropic.calls[1].messages[0].content).toContain("We need MongoDB.");
-    expect(anthropic.calls[1].system).toContain("the fact wins");
-    expect(anthropic.calls[1].system).toContain("Never put a [CLOSED] slug in gap_tags");
+    expect(anthropic.calls[1].system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(anthropic.calls[1].system.map((b) => b.text).join(" ")).toContain("the fact wins");
+    expect(anthropic.calls[1].system.map((b) => b.text).join(" ")).toContain("Never put a [CLOSED] slug in gap_tags");
   });
 
   it("refuses Claude calls that didn't come from a dashboard click, before calling the model", async () => {
@@ -243,6 +244,31 @@ describe("resume engine", () => {
     const { application } = await res.json();
     expect(application.variant).toBe("itsupport");
     expect(application.match_score).toBe("74");
+  });
+
+  it("saves the nightly search's own estimate without calling the model", async () => {
+    const anthropic = fakeAnthropic(() => ({}));
+    server = await start(testConfig(data.root, { aiScriptCalls: "none" }), { anthropic });
+    const res = await server.call("POST", "/api/applications", {
+      body: {
+        company: "Initech", role: "Dev", postingText: "C# and Redis.", match_score: 68,
+        variant: "dotnet_azure", gap_tags: ["Caching Redis", "etl-ssis"], gaps: ["No Redis."], reasoning: "Fits.",
+      },
+    });
+    expect(res.status).toBe(201);
+    const { folder } = await res.json();
+    const row = await (await server.call("GET", `/api/applications/${folder}`)).json();
+    expect(row.variant).toBe("dotnet_azure");
+    expect(row.match_score).toBe("68");
+    expect(row.gap_tags).toBe("caching-redis,etl-ssis");
+    expect(row.analysis.source).toBe("nightly-estimate");
+    expect(row.analysis.gaps).toEqual(["No Redis."]);
+    expect(anthropic.calls).toHaveLength(0);
+
+    const bad = await server.call("POST", "/api/applications", {
+      body: { company: "Initech", role: "Dev", variant: "fullstack" },
+    });
+    expect(bad.status).toBe(400);
   });
 
   it("AI_SCRIPT_CALLS=analyze lets scripts analyze but not build", async () => {

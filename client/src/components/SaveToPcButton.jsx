@@ -61,7 +61,7 @@ export default function SaveToPcButton({ folder, files }) {
         // Downloads and this says where to go, once — after that the
         // picked folder is remembered and used every time.
         <span className="small text-muted text-end">
-          First time: pick Downloads\SmartLedgerAI-JobPrep\JobSearch\enginepplications
+          First time: pick {["Downloads", "SmartLedgerAI-JobPrep", "JobSearch", "engine", "applications"].join(" \\ ")}
         </span>
       )}
       {message && <span className="small text-success">{message}</span>}

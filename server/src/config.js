@@ -119,6 +119,9 @@ export function loadConfig(env = process.env) {
     },
     anthropicApiKey: env.ANTHROPIC_API_KEY || null,
     aiScriptCalls,
+    // Monthly Claude budget in USD — only what the Costs page measures
+    // against; the hard cap lives in the Anthropic Console.
+    aiMonthlyBudget: Number(env.AI_MONTHLY_BUDGET) || 20,
     python: env.PYTHON || null,
   };
 }

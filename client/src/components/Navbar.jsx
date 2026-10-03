@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { checkSession, fetchHealth, logout } from "../api.js";
+import { checkSession, fetchHealth, fetchUsage, logout } from "../api.js";
+import { usd } from "../costs.js";
 
 export default function Navbar() {
   const { pathname } = useLocation();
@@ -24,6 +25,14 @@ export default function Navbar() {
   }, [pathname]);
   const alerts = health ? health.error + health.warn : 0;
 
+  // This month's Claude spend next to the Costs link, coloured as it nears
+  // the budget; refreshed on every page change (builds happen on other pages).
+  const [spend, setSpend] = useState(null);
+  useEffect(() => {
+    fetchUsage().then((u) => setSpend(u)).catch(() => {});
+  }, [pathname]);
+  const spendPct = spend ? spend.usd / spend.budget : 0;
+
   return (
     <nav className="navbar navbar-dark bg-dark mb-4 app-navbar">
       <div className="container">
@@ -39,6 +48,14 @@ export default function Navbar() {
           <Link className={linkClass("/truth")} to="/truth">Truth Bank</Link>
           <Link className={linkClass("/gaps")} to="/gaps">Gaps</Link>
           <Link className={linkClass("/resume")} to="/resume">Résumé</Link>
+          <Link className={linkClass("/costs")} to="/costs">
+            Costs
+            {spend && (
+              <span className={`badge rounded-pill ms-1 ${spendPct >= 1 ? "bg-danger" : spendPct >= 0.8 ? "bg-warning text-dark" : "bg-secondary"}`}>
+                {usd(spend.usd)}
+              </span>
+            )}
+          </Link>
           <Link className={linkClass("/health")} to="/health">
             Health
             {alerts > 0 && (

@@ -243,3 +243,5 @@ export const fetchHealth = () => request("GET", "/api/health");
 export const dismissHealthIssue = (key) => request("POST", "/api/health/dismiss", { key });
 export const restoreHealthIssues = () => request("DELETE", "/api/health/dismiss");
 export const fetchResumeBuilds = () => request("GET", "/api/resume/builds");
+
+export const fetchUsage = (month) => request("GET", `/api/usage${month ? `?month=${month}` : ""}`);

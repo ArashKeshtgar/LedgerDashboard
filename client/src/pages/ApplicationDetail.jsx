@@ -19,6 +19,7 @@ import { daysUntilFollowup, followupMailto } from "../contact.js";
 import { TrackBadge } from "../components/TrackBadge.jsx";
 import { trackOf } from "../track.js";
 import SaveToPcButton from "../components/SaveToPcButton.jsx";
+import PackageCostCard from "../components/PackageCostCard.jsx";
 
 // Pipeline event dates are usually a plain YYYY-MM-DD, but the "Record a
 // stage update" form can attach a time too ("...T14:30") — show that as a
@@ -959,6 +960,8 @@ export default function ApplicationDetail() {
           </div>
         </div>
       )}
+
+      <PackageCostCard usage={app.usage} />
 
       {app.files && app.files.length > 0 && (
         <div className="card mb-4">

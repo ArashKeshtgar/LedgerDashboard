@@ -14,6 +14,7 @@ import TruthBankPage from "./pages/TruthBankPage.jsx";
 import GapsPage from "./pages/GapsPage.jsx";
 import ResumePage, { BuiltResumePage } from "./pages/ResumePage.jsx";
 import HealthPage from "./pages/HealthPage.jsx";
+import CostsPage from "./pages/CostsPage.jsx";
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
                 <Route path="/resume" element={<ResumePage />} />
                 <Route path="/resume/:folder" element={<BuiltResumePage />} />
                 <Route path="/health" element={<HealthPage />} />
+                <Route path="/costs" element={<CostsPage />} />
               </Routes>
             </div>
           </main>

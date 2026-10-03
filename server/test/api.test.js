@@ -191,6 +191,44 @@ describe("resume engine", () => {
     expect(row.gap_tags).toBe("etl-ssis,caching-redis");
   });
 
+  it("files each Claude call's cost with its package and totals the month", async () => {
+    const anthropic = {
+      calls: [],
+      messages: {
+        create: async () => ({
+          model: "claude-sonnet-5",
+          usage: { input_tokens: 1000, cache_read_input_tokens: 20000, cache_creation_input_tokens: 0, output_tokens: 2000 },
+          content: [{ type: "tool_use", input: {
+            base_variant: "dotnet_azure", match_score: 70, recommendation: "apply",
+            reasoning: "Ok.", gaps: [], gap_tags: [],
+          } }],
+        }),
+      },
+    };
+    server = await start(testConfig(data.root, { aiMonthlyBudget: 20 }), { anthropic });
+    const ai = { "X-AI-Request": "app" };
+    const { folder } = await (await server.call("POST", "/api/packages/analyze", {
+      body: { company: "Initech", role: "Dev", postingText: "C#" }, headers: ai,
+    })).json();
+    await server.call("POST", "/api/packages/reanalyze", { body: { folder }, headers: ai });
+
+    // 1000*2 + 20000*0.2 + 2000*10 per million = $0.026 a call
+    const row = await (await server.call("GET", `/api/applications/${folder}`)).json();
+    expect(row.usage.calls).toBe(2);
+    expect(row.usage.usd).toBeCloseTo(0.052, 6);
+    expect(row.usage.byKind).toEqual({ analyze: 0.026, reanalyze: 0.026 });
+    expect(row.usage.list[0]).toMatchObject({ kind: "analyze", model: "claude-sonnet-5", cache_read: 20000 });
+
+    const month = await (await server.call("GET", "/api/usage")).json();
+    expect(month.budget).toBe(20);
+    expect(month.usd).toBeCloseTo(0.052, 6);
+    expect(month.packages).toEqual([
+      expect.objectContaining({ folder, company: "Initech", role: "Dev", calls: 2 }),
+    ]);
+    const empty = await (await server.call("GET", "/api/usage?month=2001-01")).json();
+    expect(empty).toMatchObject({ usd: 0, calls: 0, packages: [] });
+  });
+
   it("analyze drops a closed gap slug even when the model ignores the prompt", async () => {
     writeFileSync(
       path.join(data.engine, "gap_tags.yml"),

@@ -91,6 +91,7 @@ The server suite runs the real Express app against a temporary copy of the data 
 | `target_list.csv` | the recruiter outreach list |
 | `applications/<folder>/` | posting, `analysis.json` (gaps + truth-bank fingerprint), `plan.json` (fact behind every bullet), Match Report, Interview Questions, résumé/cover letter files |
 | `health_dismissed.yml` | Health checks you chose to hide |
+| `applications/<folder>/ai_usage.jsonl` | one line per Claude call for that package (tokens + USD) — the Costs page and each package's cost card read these; `AI_MONTHLY_BUDGET` (default 20) sets the budget the Costs page measures against |
 | `.git` | local-only history of `facts/`, `gap_tags.yml`, `templates/` (no remote) — every dashboard save is a commit |
 
 `server/motivation.yml` holds the daily line at the top of every page. One quote is picked per day, by date, so it stays put until midnight.

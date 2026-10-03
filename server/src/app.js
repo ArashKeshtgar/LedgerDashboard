@@ -6,6 +6,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { FileLockedError } from "./csv.js";
+import { monthUsage, readUsage, recordUsage, summarize, usageRecord } from "./aiUsage.js";
 import { isSafeFolderName, resolveApplicationFolder, UnsafeFolderError } from "./paths.js";
 import { attachPipeline, FOLLOWUP_KEY } from "./pipeline.js";
 import { passwordMatches, createLoginLimiter, originGuard } from "./security.js";
@@ -433,7 +434,28 @@ export function createApp(cfg, deps = {}) {
         }
       }
 
-      res.json({ ...row, files, matchReport, interviewQuestions, postingText, analysis });
+      const calls = existsSync(folderPath) ? readUsage(folderPath) : [];
+      const usage = { ...summarize(calls), list: calls };
+      res.json({ ...row, files, matchReport, interviewQuestions, postingText, analysis, usage });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // GET /api/usage?month=YYYY-MM - what Claude calls cost this month (UTC),
+  // in total and per package, against the monthly budget.
+  app.get("/api/usage", async (req, res) => {
+    try {
+      const month = /^\d{4}-\d{2}$/.test(req.query.month || "")
+        ? req.query.month
+        : new Date().toISOString().slice(0, 7);
+      const usage = monthUsage(APPLICATIONS_DIR, month);
+      const rows = await store.listApplications();
+      const byFolder = new Map(rows.map((r) => [r.folder, r]));
+      usage.packages = usage.packages.map((p) => ({
+        ...p, company: byFolder.get(p.folder)?.company || "", role: byFolder.get(p.folder)?.role || "",
+      }));
+      res.json({ ...usage, budget: cfg.aiMonthlyBudget });
     } catch (err) {
       sendError(res, err);
     }
@@ -688,7 +710,10 @@ export function createApp(cfg, deps = {}) {
   // One scoring call against the fact bank and gap dictionary as they are
   // right now. Shared by /analyze (a new posting) and /reanalyze (a posting
   // scored before newer evidence landed — a row's gap_tags are a snapshot).
-  async function analyzePosting(company, role, postingText) {
+  // folder: the draft being re-analyzed, so its cost is filed with it right
+  // away; a new posting has no folder yet, so the caller files `usage` once
+  // it exists.
+  async function analyzePosting(company, role, postingText, folder = null) {
     const facts = loadFactBank();
     const factSummary = Object.values(facts)
       .filter((f) => !(f.tags || []).includes("excluded"))
@@ -728,7 +753,11 @@ export function createApp(cfg, deps = {}) {
       tool_choice: { type: "tool", name: "submit_analysis" },
     });
     logUsage("analyze", message);
-    return normalizeAnalysis(message);
+    const usage = usageRecord(folder ? "reanalyze" : "analyze", message, "claude-sonnet-5");
+    // Filed before normalizeAnalysis, which can still throw: a failed call
+    // was paid for all the same.
+    if (folder) recordUsage(resolveApplicationFolder(APPLICATIONS_DIR, folder), usage);
+    return { ...normalizeAnalysis(message), usage };
   }
 
   // Every Claude call spends API credit, so it has to start from a click in
@@ -776,6 +805,7 @@ export function createApp(cfg, deps = {}) {
         gap_tags: analysis.gap_tags.join(","),
       });
       writeFileSync(path.join(APPLICATIONS_DIR, folder, "posting.txt"), postingText, "utf-8");
+      recordUsage(resolveApplicationFolder(APPLICATIONS_DIR, folder), analysis.usage);
       saveAnalysis(folder, analysis);
       const createdRow = await withPipelineFor(folder);
 
@@ -816,7 +846,7 @@ export function createApp(cfg, deps = {}) {
         return res.status(422).json({ error: "This application has no saved posting.txt to re-analyze" });
       }
 
-      const analysis = await analyzePosting(row.company, row.role, readFileSync(postingPath, "utf-8"));
+      const analysis = await analyzePosting(row.company, row.role, readFileSync(postingPath, "utf-8"), folder);
       await updateApplicationRowByFolder(folder, {
         match_score: analysis.match_score,
         gap_tags: analysis.gap_tags.join(","),
@@ -989,6 +1019,7 @@ export function createApp(cfg, deps = {}) {
       for (let attempt = 0; attempt < 2; attempt++) {
         const message = await client.messages.create(request);
         logUsage("build", message);
+        recordUsage(folderPath, usageRecord(attempt ? "build-repair" : "build", message, request.model));
         const toolUse = message.content.find((b) => b.type === "tool_use");
         if (!toolUse) throw new Error("Model did not return a structured package");
         generated = toolUse.input;

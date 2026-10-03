@@ -288,10 +288,13 @@ export function createApp(cfg, deps = {}) {
   // POST /api/applications - add a new application (starts life in "draft",
   // same as one built by hand) so a new posting can be tracked without
   // touching ledger.csv directly. Body: { company, role, location?, branch?,
-  // source?, posting_url?, match_score?, notes? }
+  // source?, posting_url?, match_score?, notes?, postingText? }
+  // postingText is saved as posting.txt, so the draft can be analyzed later
+  // from its page — how the nightly search saves postings without spending
+  // API credit on them.
   app.post("/api/applications", async (req, res) => {
     try {
-      const { company, role, location, branch, source, posting_url, match_score, notes } =
+      const { company, role, location, branch, source, posting_url, match_score, notes, postingText } =
         req.body || {};
       if (!company || !role) {
         return res.status(400).json({ error: "company and role are required" });
@@ -300,6 +303,9 @@ export function createApp(cfg, deps = {}) {
       const folder = await createApplicationRow({
         company, role, location, branch, source, posting_url, match_score, notes,
       });
+      if (postingText) {
+        writeFileSync(path.join(APPLICATIONS_DIR, folder, "posting.txt"), postingText, "utf-8");
+      }
       res.status(201).json(await withPipelineFor(folder));
     } catch (err) {
       sendError(res, err);
@@ -639,6 +645,28 @@ export function createApp(cfg, deps = {}) {
     return normalizeAnalysis(message);
   }
 
+  // Every Claude call spends API credit, so it has to start from a click in
+  // the dashboard: the client marks those three requests with X-AI-Request:
+  // app. A script (the nightly search, a curl) doesn't, and is refused unless
+  // AI_SCRIPT_CALLS opens it up. This is a spending brake, not security —
+  // anyone already past the login could send the header.
+  const AI_ROUTES = {
+    "/api/packages/analyze": "analyze",
+    "/api/packages/reanalyze": "analyze",
+    "/api/packages/build": "build",
+  };
+  app.post(Object.keys(AI_ROUTES), (req, res, next) => {
+    if (req.get("x-ai-request") === "app") return next();
+    const allowed = cfg.aiScriptCalls === "all" || (cfg.aiScriptCalls === "analyze" && AI_ROUTES[req.path] === "analyze");
+    if (allowed) return next();
+    res.status(403).json({
+      error:
+        "Claude calls only start from a button in the dashboard (they spend API credit). " +
+        "Save the posting as a draft with POST /api/applications { postingText } and analyze it from its page.",
+      code: "ai_manual_only",
+    });
+  });
+
   // POST /api/packages/analyze - stage 1 (light). This is the ONLY place a
   // draft row/folder gets created for the AI-package flow — build fills that
   // same folder in rather than making a new one, so analyzing a posting twice
@@ -682,7 +710,8 @@ export function createApp(cfg, deps = {}) {
   // posting.txt against today's fact bank, and overwrite its match_score and
   // gap_tags. Drafts only: once a package is sent, its gap_tags record what
   // was missing when it went out, which is what Stats correlates with
-  // rejections. Variant is left alone (the build may already rely on it).
+  // rejections. A variant already set is left alone (the build may rely on
+  // it); a draft saved unscored gets its first one here.
   // Body: { folder }
   app.post("/api/packages/reanalyze", async (req, res) => {
     try {
@@ -705,6 +734,8 @@ export function createApp(cfg, deps = {}) {
       await updateApplicationRowByFolder(folder, {
         match_score: analysis.match_score,
         gap_tags: analysis.gap_tags.join(","),
+        // A draft saved without analysis has no variant yet; build needs one.
+        ...(row.variant ? {} : { variant: analysis.base_variant }),
       });
       saveAnalysis(folder, analysis);
       res.json({

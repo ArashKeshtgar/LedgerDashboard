@@ -215,6 +215,54 @@ describe("resume engine", () => {
     expect(anthropic.calls[1].system).toContain("Never put a [CLOSED] slug in gap_tags");
   });
 
+  it("refuses Claude calls that didn't come from a dashboard click, before calling the model", async () => {
+    const anthropic = fakeAnthropic(() => ({
+      base_variant: "itsupport", match_score: 74, recommendation: "apply",
+      reasoning: "Ok.", gaps: [], gap_tags: [],
+    }));
+    server = await start(testConfig(data.root, { aiScriptCalls: "none" }), { anthropic });
+    const posting = { company: "Initech", role: "Help Desk", postingText: "We need help desk." };
+
+    for (const url of ["/api/packages/analyze", "/api/packages/reanalyze", "/api/packages/build"]) {
+      const res = await server.call("POST", url, { body: { ...posting, folder: FOLDER_A } });
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("ai_manual_only");
+    }
+    expect(anthropic.calls).toHaveLength(0);
+
+    // The script's way: save the posting unscored, then analyze it with a click.
+    const draft = await server.call("POST", "/api/applications", { body: posting });
+    const { folder, variant } = await draft.json();
+    expect(variant).toBe("");
+    expect(readFileSync(path.join(data.engine, "applications", folder, "posting.txt"), "utf-8"))
+      .toBe("We need help desk.");
+    const res = await server.call("POST", "/api/packages/reanalyze", {
+      body: { folder }, headers: { "X-AI-Request": "app" },
+    });
+    expect(res.status).toBe(200);
+    const { application } = await res.json();
+    expect(application.variant).toBe("itsupport");
+    expect(application.match_score).toBe("74");
+  });
+
+  it("AI_SCRIPT_CALLS=analyze lets scripts analyze but not build", async () => {
+    const anthropic = fakeAnthropic(() => ({
+      base_variant: "dotnet_azure", match_score: 70, recommendation: "apply",
+      reasoning: "Ok.", gaps: [], gap_tags: [],
+    }));
+    server = await start(testConfig(data.root, { aiScriptCalls: "analyze" }), { anthropic });
+    const analyzed = await server.call("POST", "/api/packages/analyze", {
+      body: { company: "Initech", role: "Dev", postingText: "C#" },
+    });
+    expect(analyzed.status).toBe(200);
+    const { folder } = await analyzed.json();
+    const built = await server.call("POST", "/api/packages/build", {
+      body: { folder, company: "Initech", role: "Dev", postingText: "C#", base_variant: "dotnet_azure" },
+    });
+    expect(built.status).toBe(403);
+    expect(anthropic.calls).toHaveLength(1);
+  });
+
   it("reanalyze refuses a sent application and one without a posting, before calling the model", async () => {
     const anthropic = fakeAnthropic(() => ({}));
     server = await start(testConfig(data.root), { anthropic });

@@ -70,6 +70,9 @@ export function testConfig(root, overrides = {}) {
     clientDist: path.join(root, "no-client-build"),
     motivationPath: path.join(root, "motivation.yml"),
     anthropicApiKey: null,
+    // Tests call the AI routes directly, like a script would; the manual-only
+    // brake has its own tests with "none".
+    aiScriptCalls: "all",
     python: process.execPath,
     ...overrides,
   };

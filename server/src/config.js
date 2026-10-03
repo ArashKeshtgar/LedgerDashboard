@@ -75,6 +75,14 @@ export function loadConfig(env = process.env) {
   }
   const secureCookies = cookieSecureSetting ? cookieSecureSetting === "true" : production;
 
+  // Claude calls cost API credit, so by default only a button click in the
+  // dashboard may start one. AI_SCRIPT_CALLS lets scripts (the nightly job
+  // search) in too: "analyze" = analyze/reanalyze only, "all" = build as well.
+  const aiScriptCalls = (env.AI_SCRIPT_CALLS || "none").toLowerCase();
+  if (!["none", "analyze", "all"].includes(aiScriptCalls)) {
+    throw new Error(`AI_SCRIPT_CALLS must be "none", "analyze" or "all", not "${env.AI_SCRIPT_CALLS}".`);
+  }
+
   const extraOrigins = (env.CORS_ORIGINS || "")
     .split(",")
     .map((o) => o.trim())
@@ -108,6 +116,7 @@ export function loadConfig(env = process.env) {
       trustServerCertificate: (env.DB_TRUST_SERVER_CERT || "true") !== "false",
     },
     anthropicApiKey: env.ANTHROPIC_API_KEY || null,
+    aiScriptCalls,
     python: env.PYTHON || null,
   };
 }

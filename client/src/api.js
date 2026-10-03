@@ -117,10 +117,14 @@ export async function updateApplication(id, fields) {
   return res.json();
 }
 
+// The server only runs a Claude call (it spends API credit) when the
+// request says it came from a click here, not from a script.
+const AI_HEADERS = { "Content-Type": "application/json", "X-AI-Request": "app" };
+
 export async function analyzePosting({ company, role, postingText, location, source, posting_url }) {
   const res = await fetch(`${API_BASE}/api/packages/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: AI_HEADERS,
     body: JSON.stringify({ company, role, postingText, location, source, posting_url }),
   });
   const body = await res.json().catch(() => ({}));
@@ -140,7 +144,7 @@ export async function deleteApplication(id) {
 export async function buildPackage(fields) {
   const res = await fetch(`${API_BASE}/api/packages/build`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: AI_HEADERS,
     body: JSON.stringify(fields),
   });
   const body = await res.json().catch(() => ({}));
@@ -157,7 +161,7 @@ export async function buildPackage(fields) {
 export async function reanalyzePackage(folder) {
   const res = await fetch(`${API_BASE}/api/packages/reanalyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: AI_HEADERS,
     body: JSON.stringify({ folder }),
   });
   const body = await res.json().catch(() => ({}));

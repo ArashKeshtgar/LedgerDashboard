@@ -435,7 +435,10 @@ export default function ApplicationDetail() {
   // without this the page kept offering "Apply — build" again after a
   // successful build, with no way to mark it sent here.
   const packageBuilt = (app.files || []).some((f) => /Resume\.(docx|pdf)$/i.test(f));
-  const offerBuild = !packageBuilt || showRebuild;
+  // Saved by the nightly search without a Claude call: there's no variant to
+  // build with until it's analyzed, which only happens when you click.
+  const unscored = !app.variant;
+  const offerBuild = !unscored && (!packageBuilt || showRebuild);
 
   const waitingKeys = new Set((stages.stages || []).filter((s) => s.waiting).map((s) => s.key));
   const canFollowup = waitingKeys.has(app.stage);
@@ -462,19 +465,25 @@ export default function ApplicationDetail() {
         <div className="alert alert-warning mb-3">
           <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span>
-              {packageBuilt
+              {unscored
+                ? "🕒 Saved without a score — no API credit has been spent on it yet. Analyze it if it looks worth it; building comes after that, also only when you click."
+                : packageBuilt
                 ? "📦 The package is built but not sent yet — review the files below, send the application, then mark it as sent. Until then it won't show up on the Pipeline or count in Stats."
                 : "📝 This package hasn't been sent yet — it won't show up on the Pipeline or count in Stats until you decide. Nothing gets built until you say so."}
             </span>
             <div className="d-flex flex-wrap gap-2">
               <button
                 type="button"
-                className="btn btn-sm btn-outline-primary rounded-pill"
+                className={`btn btn-sm rounded-pill ${unscored ? "btn-primary" : "btn-outline-primary"}`}
                 disabled={reanalyzing || deleting || !!deciding}
-                title="Re-score this posting against today's fact bank and refresh its gap tags"
+                title="Score this posting against today's fact bank (one Claude call — uses API credit)"
                 onClick={handleReanalyze}
               >
-                {reanalyzing ? "Re-analyzing…" : "🔄 Re-analyze gaps"}
+                {reanalyzing
+                  ? "Analyzing…"
+                  : unscored
+                  ? "🤖 Analyze — score it (uses API credit)"
+                  : "🔄 Re-analyze gaps"}
               </button>
               <button
                 type="button"
@@ -565,7 +574,7 @@ export default function ApplicationDetail() {
             </div>
           )}
 
-          {!offerBuild && (
+          {!unscored && !offerBuild && (
             <div className="d-flex flex-wrap gap-2 mt-3 pt-3 border-top">
               <button
                 type="button"

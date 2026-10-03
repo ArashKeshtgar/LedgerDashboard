@@ -176,6 +176,26 @@ describe("resume engine", () => {
     expect(row.gap_tags).toBe("etl-ssis,caching-redis");
   });
 
+  it("analyze drops a closed gap slug even when the model ignores the prompt", async () => {
+    writeFileSync(
+      path.join(data.engine, "gap_tags.yml"),
+      "etl-ssis: ETL with SSIS\napp-security: JWT/RBAC — بسته شد ۲۶ سپتامبر\n"
+    );
+    const anthropic = fakeAnthropic(() => ({
+      base_variant: "dotnet_azure", match_score: 68, recommendation: "apply",
+      reasoning: "Ok.", gaps: ["No OAuth certs", "No SSIS"], gap_tags: ["app-security", "etl-ssis"],
+    }));
+    server = await start(testConfig(data.root), { anthropic });
+    const res = await server.call("POST", "/api/packages/analyze", {
+      body: { company: "Initech", role: "Dev", postingText: "OAuth and SSIS." },
+    });
+    expect(res.status).toBe(200);
+    const { folder } = await res.json();
+    const row = await (await server.call("GET", `/api/applications/${folder}`)).json();
+    expect(row.gap_tags).toBe("etl-ssis");
+    expect(row.analysis.dropped_closed_gaps).toEqual(["app-security"]);
+  });
+
   it("analyze saves nothing when the model lists gaps but no gap_tags", async () => {
     const anthropic = fakeAnthropic(() => ({
       base_variant: "dotnet_azure", match_score: 58, recommendation: "skip",

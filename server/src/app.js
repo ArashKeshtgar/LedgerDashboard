@@ -308,14 +308,7 @@ export function createApp(cfg, deps = {}) {
       if (variant && !variants.includes(variant)) {
         return res.status(400).json({ error: `variant must be one of ${variants.join(", ")}` });
       }
-      // A closed gap is closed whoever scored the posting: the nightly
-      // search's prompt says so too, but it once tagged a draft with two
-      // closed slugs anyway, so the dictionary is enforced here.
-      const dict = loadGapTagsDict();
-      const isClosed = (t) => dict[t] != null && gapStatus(String(dict[t])) === "closed";
-      const allTags = toGapTagList(gap_tags);
-      const tags = allTags.filter((t) => !isClosed(t));
-      const droppedClosedGaps = allTags.filter(isClosed);
+      const { kept: tags, dropped: droppedClosedGaps } = withoutClosedGaps(toGapTagList(gap_tags));
 
       const folder = await createApplicationRow({
         company, role, location, branch, source, posting_url, match_score, notes,
@@ -593,6 +586,16 @@ export function createApp(cfg, deps = {}) {
     return [...new Set(items.map(slug).filter(Boolean))];
   }
 
+  // A closed gap is closed whoever scored the posting. Both the analyze
+  // prompt and the nightly search are told never to use a [CLOSED] slug, and
+  // both have done it anyway (TCS, 2026-10-03), so the dictionary is
+  // enforced here rather than trusted to the prompt.
+  function withoutClosedGaps(tags) {
+    const dict = loadGapTagsDict();
+    const isClosed = (t) => dict[t] != null && gapStatus(String(dict[t])) === "closed";
+    return { kept: tags.filter((t) => !isClosed(t)), dropped: tags.filter(isClosed) };
+  }
+
   // Last check even under strict mode: a truncated or refused response can
   // still come back incomplete, and it should fail loudly instead of saving
   // a draft row with no gap tags.
@@ -604,16 +607,18 @@ export function createApp(cfg, deps = {}) {
     if (!toolUse) throw new Error("Model did not return a structured analysis");
     const a = toolUse.input;
     const gaps = Array.isArray(a.gaps) ? a.gaps : [];
-    const gap_tags = toGapTagList(a.gap_tags);
-    if (gaps.length > 0 && gap_tags.length === 0) {
+    const allTags = toGapTagList(a.gap_tags);
+    if (gaps.length > 0 && allTags.length === 0) {
       throw new Error("Analysis listed gaps but no gap_tags — nothing was saved, try again");
     }
+    const { kept: gap_tags, dropped } = withoutClosedGaps(allTags);
     const score = Math.round(Number(a.match_score));
     return {
       ...a,
       match_score: Number.isFinite(score) ? Math.min(100, Math.max(0, score)) : 0,
       gaps,
       gap_tags,
+      ...(dropped.length ? { dropped_closed_gaps: dropped } : {}),
     };
   }
 
@@ -633,6 +638,7 @@ export function createApp(cfg, deps = {}) {
       reasoning: analysis.reasoning,
       gaps: analysis.gaps,
       gap_tags: analysis.gap_tags,
+      ...(analysis.dropped_closed_gaps ? { dropped_closed_gaps: analysis.dropped_closed_gaps } : {}),
     };
     writeFileSync(
       path.join(resolveApplicationFolder(APPLICATIONS_DIR, folder), "analysis.json"),

@@ -56,6 +56,14 @@ export default function SaveToPcButton({ folder, files }) {
           into {dirName}\ · change
         </button>
       )}
+      {canPickFolder && !dirName && !saving && (
+        // Browsers can't preset an absolute path: the picker opens in
+        // Downloads and this says where to go, once — after that the
+        // picked folder is remembered and used every time.
+        <span className="small text-muted text-end">
+          First time: pick Downloads\SmartLedgerAI-JobPrep\JobSearch\enginepplications
+        </span>
+      )}
       {message && <span className="small text-success">{message}</span>}
       {error && <span className="small text-danger">{error}</span>}
     </div>

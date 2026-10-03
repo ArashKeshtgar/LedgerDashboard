@@ -3,9 +3,10 @@
 // folder the user picked once (JobSearch\engine\applications). Chrome/Edge
 // remember that pick across visits; the handle is kept in IndexedDB because
 // localStorage can't hold it. Browsers without the File System Access API
-// (phones, Firefox) just download the files one by one instead.
+// (phones, Firefox) get one <folder>.zip holding the folder instead.
 
 import { fileUrl } from "./api.js";
+import { makeZip } from "./zip.js";
 
 const DB = "ledger-dashboard";
 const STORE = "handles";
@@ -71,13 +72,21 @@ async function fetchFile(folder, name) {
 // user cancels the folder picker.
 export async function saveFolderToPc(folder, files) {
   if (!canPickFolder) {
+    // Firefox/phones can't write into a folder: one zip named after the
+    // folder, holding the folder itself, so unzipping it in applications
+    // gives exactly the layout a direct save would.
+    const entries = [];
     for (const name of files) {
-      const url = URL.createObjectURL(await fetchFile(folder, name));
-      const a = Object.assign(document.createElement("a"), { href: url, download: name });
-      a.click();
-      URL.revokeObjectURL(url);
+      const bytes = new Uint8Array(await (await fetchFile(folder, name)).arrayBuffer());
+      entries.push({ path: `${folder}/${name}`, bytes });
     }
-    return { where: "Downloads", count: files.length };
+    const url = URL.createObjectURL(makeZip(entries));
+    const a = Object.assign(document.createElement("a"), { href: url, download: `${folder}.zip` });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return { where: `Downloads\\${folder}.zip`, count: files.length };
   }
 
   let dir = await savedDir();

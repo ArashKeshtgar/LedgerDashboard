@@ -46,11 +46,16 @@ export default function SaveToPcButton({ folder, files }) {
             ? dirName
               ? `Copies this folder into ${dirName}\\`
               : "First time: pick JobSearch\\engine\\applications on this PC"
-            : "This browser can't write to a folder — the files go to Downloads"
+            : "This browser can't write to a folder — downloads one zip of the folder"
         }
       >
-        {saving ? "Saving…" : "💾 Save folder to PC"}
+        {saving ? "Saving…" : canPickFolder ? "💾 Save folder to PC" : "💾 Download folder (.zip)"}
       </button>
+      {!canPickFolder && !saving && (
+        <span className="small text-muted text-end">
+          Unzip it into applications — or open the dashboard in Chrome/Edge to save straight there
+        </span>
+      )}
       {dirName && !saving && (
         <button type="button" className="btn btn-link btn-sm p-0 small" onClick={changeFolder}>
           into {dirName}\ · change

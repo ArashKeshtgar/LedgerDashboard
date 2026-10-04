@@ -209,7 +209,7 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
           >
             <defs>
               <linearGradient id="wx-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--wx-line)" stopOpacity="0.45" />
+                <stop offset="0%" stopColor="var(--wx-line)" stopOpacity="0.28" />
                 <stop offset="100%" stopColor="var(--wx-line)" stopOpacity="0.02" />
               </linearGradient>
             </defs>
@@ -258,7 +258,7 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
                 cx={x(windowDays.indexOf(selectedDay))}
                 cy={y(vals[windowDays.indexOf(selectedDay)])}
                 r="6"
-                fill="var(--wx-accent)"
+                fill="var(--wx-line)"
                 stroke="var(--wx-bg)"
                 strokeWidth="2"
               />

@@ -983,27 +983,31 @@ tr.fact-highlight > td {
   background-color: var(--bs-primary-bg-subtle);
 }
 
-/* ---- Applications: weather-forecast style daily activity panel ----
-   Always a deep night-sky card (like a forecast app), in light and dark
-   mode alike; series colours are validated against --wx-bg. */
+/* ---- Applications: forecast-style daily activity panel ----
+   Laid out like a weather forecast (day cards, a smooth chart, a band
+   underneath) but dressed in the app's own theme: white card, soft border,
+   the blue accent of the track tabs. Series colours (blue line, orange
+   rejections) were validated against the white surface. */
 .wx-panel {
-  --wx-bg: #2b2452;
-  --wx-card: rgba(255, 255, 255, 0.07);
-  --wx-card-hover: rgba(255, 255, 255, 0.12);
-  --wx-text: #ffffff;
-  --wx-text-2: rgba(255, 255, 255, 0.72);
-  --wx-grid: rgba(255, 255, 255, 0.10);
-  --wx-hatch: rgba(255, 255, 255, 0.18);
-  --wx-cross: rgba(255, 255, 255, 0.55);
-  --wx-week: rgba(255, 255, 255, 0.05);
-  --wx-line: #199e70;
-  --wx-reject: #d95926;
-  --wx-accent: #f5c542;
-  background: linear-gradient(180deg, #3a2f74 0%, var(--wx-bg) 55%, #211c40 100%);
+  --wx-bg: var(--surface);
+  --wx-card: rgba(11, 11, 11, 0.035);
+  --wx-card-hover: rgba(11, 11, 11, 0.06);
+  --wx-text: #0b0b0b;
+  --wx-text-2: #52514e;
+  --wx-text-3: #898781;
+  --wx-grid: #e1e0d9;
+  --wx-hatch: #d4d3cc;
+  --wx-cross: #898781;
+  --wx-week: rgba(42, 120, 214, 0.06);
+  --wx-line: #2a78d6;
+  --wx-reject: #eb6834;
+  --wx-accent: #1f5fad;
+  background: var(--wx-bg);
   color: var(--wx-text);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  padding: 16px 18px 14px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 18px 12px;
 }
 .wx-head {
   display: flex;
@@ -1012,32 +1016,42 @@ tr.fact-highlight > td {
   gap: 10px 16px;
   margin-bottom: 12px;
 }
-.wx-title { font-weight: 600; }
-.wx-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.wx-title { font-weight: 600; font-size: 0.95rem; letter-spacing: -0.01em; }
+/* Same segmented pill as the All / Developer / IT tabs. */
+.wx-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+}
 .wx-tab {
   border: 0;
   border-radius: 999px;
   padding: 4px 14px;
-  font-size: 0.85rem;
-  background: var(--wx-card);
-  color: var(--wx-text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: transparent;
+  color: #57564f;
 }
-.wx-tab:hover { background: var(--wx-card-hover); }
-.wx-tab.active { background: var(--wx-accent); color: #1f1b3d; font-weight: 600; }
+.wx-tab:hover { background: rgba(11, 11, 11, 0.05); }
+.wx-tab.active { background: #1f5fad; color: #fff; }
 .wx-summary { margin-left: auto; font-size: 0.85rem; color: var(--wx-text-2); }
 .wx-summary strong { color: var(--wx-text); }
-.wx-muted { color: var(--wx-text-2); }
+.wx-muted { color: var(--wx-text-3); }
 
 .wx-strip { display: flex; align-items: stretch; gap: 8px; margin-bottom: 14px; }
 .wx-arrow {
-  border: 0;
+  border: 1px solid var(--border-soft);
   width: 28px;
-  border-radius: 8px;
-  background: var(--wx-card);
-  color: var(--wx-text);
+  border-radius: var(--radius-md);
+  background: var(--wx-bg);
+  color: var(--wx-text-2);
   font-size: 1.2rem;
 }
-.wx-arrow:disabled { opacity: 0.3; }
+.wx-arrow:hover:not(:disabled) { background: var(--wx-card-hover); }
+.wx-arrow:disabled { opacity: 0.35; }
 .wx-cards {
   flex: 1;
   display: grid;
@@ -1045,58 +1059,65 @@ tr.fact-highlight > td {
   gap: 8px;
 }
 .wx-card {
-  border: 2px solid transparent;
-  border-radius: 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: var(--wx-card);
   color: var(--wx-text);
   padding: 8px 10px 10px;
   text-align: left;
   min-width: 0;
-  transition: background 0.15s;
+  transition: background 0.15s, box-shadow 0.15s;
 }
 .wx-card:hover:not(:disabled) { background: var(--wx-card-hover); }
-.wx-card:disabled { opacity: 0.35; cursor: default; }
-.wx-card.today { background: rgba(255, 255, 255, 0.13); }
-.wx-card.selected { border-color: var(--wx-accent); }
+.wx-card:disabled { opacity: 0.4; cursor: default; }
+.wx-card.today { background: rgba(42, 120, 214, 0.08); }
+.wx-card.selected {
+  background: var(--wx-bg);
+  border-color: #2a78d6;
+  box-shadow: 0 0 0 3px rgba(42, 120, 214, 0.15);
+}
 .wx-card-top {
   display: flex;
   justify-content: space-between;
-  font-size: 0.8rem;
-  color: var(--wx-text-2);
+  font-size: 0.78rem;
+  color: var(--wx-text-3);
 }
 .wx-card-top span:first-child { color: var(--wx-text); font-weight: 600; }
+.wx-card.today .wx-card-top span:last-child { color: #1f5fad; font-weight: 600; }
 .wx-card-body { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; }
-.wx-icon { font-size: 1.9rem; line-height: 1; }
+.wx-icon { font-size: 1.7rem; line-height: 1; }
 .wx-values { display: flex; flex-direction: column; align-items: flex-end; }
-.wx-big { font-size: 1.35rem; font-weight: 600; line-height: 1.1; }
-.wx-small { font-size: 0.72rem; color: var(--wx-text-2); white-space: nowrap; }
+.wx-big { font-size: 1.35rem; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
+.wx-small { font-size: 0.72rem; color: var(--wx-text-3); white-space: nowrap; }
 
 .wx-chart-card {
-  background: rgba(0, 0, 0, 0.18);
-  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
   padding: 10px 12px 8px;
 }
-.wx-chart-head { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 2px; }
+.wx-chart-head { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; margin-bottom: 2px; }
+.wx-chart-head .wx-muted { font-weight: 400; }
 .wx-chart { position: relative; }
 .wx-chart svg { display: block; cursor: crosshair; }
-.wx-axis { fill: var(--wx-text-2); font-size: 11px; }
-.wx-today .wx-axis { fill: var(--wx-accent); font-weight: 600; }
+.wx-axis { fill: var(--wx-text-3); font-size: 11px; }
+.wx-today .wx-axis { fill: #1f5fad; font-weight: 600; }
 .wx-val { fill: var(--wx-text); font-size: 12px; font-weight: 600; }
 .wx-band { fill: #ffffff; font-size: 11px; font-weight: 600; }
 .wx-tip {
   position: absolute;
   top: 52px;
   width: 160px;
-  background: #ffffff;
-  color: #0b0b0b;
-  border-radius: 10px;
+  background: var(--surface);
+  color: var(--wx-text);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   font-size: 0.8rem;
   line-height: 1.5;
   box-shadow: var(--shadow-md);
   pointer-events: none;
 }
-.wx-tip-day { color: #52514e; font-size: 0.75rem; margin-bottom: 2px; }
+.wx-tip-day { color: var(--wx-text-3); font-size: 0.75rem; margin-bottom: 2px; }
 .wx-foot {
   display: flex;
   flex-wrap: wrap;
@@ -1108,9 +1129,10 @@ tr.fact-highlight > td {
 .wx-key { display: inline-block; width: 14px; height: 8px; border-radius: 4px; margin-right: 4px; vertical-align: middle; }
 .wx-key-line { background: var(--wx-line); }
 .wx-key-reject { background: var(--wx-reject); }
-.wx-key-week { background: rgba(255, 255, 255, 0.18); }
+.wx-key-week { background: rgba(42, 120, 214, 0.18); }
 
 @media (max-width: 720px) {
   .wx-cards { grid-template-columns: repeat(7, 78px); overflow-x: auto; }
   .wx-summary { margin-left: 0; }
 }
+

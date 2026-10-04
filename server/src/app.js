@@ -5,11 +5,13 @@ import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync, unlink
 import { randomUUID } from "crypto";
 import path from "path";
 import Anthropic from "@anthropic-ai/sdk";
-import { FileLockedError } from "./csv.js";
+import { FileLockedError, writeFileAtomic } from "./csv.js";
 import { monthUsage, readUsage, recordUsage, summarize, usageRecord } from "./aiUsage.js";
 import { readPostings, similarTo } from "./similar.js";
 import { buildFunnel } from "./funnel.js";
-import { readRejections, reasonBucket } from "./rejections.js";
+import {
+  groupRejections, isReviewed, postingKey, readRejections, readReviewed, REVIEWED_FILE, weeklyTrend,
+} from "./rejections.js";
 import { isSafeFolderName, resolveApplicationFolder, UnsafeFolderError } from "./paths.js";
 import { attachPipeline, FOLLOWUP_KEY } from "./pipeline.js";
 import { passwordMatches, createLoginLimiter, originGuard } from "./security.js";
@@ -474,19 +476,47 @@ export function createApp(cfg, deps = {}) {
     }
   });
 
-  // GET /api/rejections?days=N - postings the nightly run turned down, read
-  // from its daily reports, each marked if it was added to the ledger anyway.
+  // GET /api/rejections - postings the nightly run turned down (last 90
+  // reports), one entry per posting however many nights it was seen, each
+  // marked reviewed or not and whether it was added to the ledger anyway;
+  // plus the weekly trend of reasons. ?summary=1 returns only the count of
+  // unreviewed postings (for the navbar badge).
+  const DAILY_DIR = path.join(ENGINE_DIR, "daily");
+  const rejectionGroups = () => groupRejections(readRejections(DAILY_DIR, { days: 90 }));
+
   app.get("/api/rejections", async (req, res) => {
     try {
-      const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
-      const key = (company, role) => `${String(company).toLowerCase().trim()}|${String(role).toLowerCase().trim()}`;
-      const tracked = new Map((await store.listApplications()).map((r) => [key(r.company, r.role), r.folder]));
-      const rows = readRejections(path.join(ENGINE_DIR, "daily"), { days }).map((r) => ({
-        ...r,
-        bucket: reasonBucket(r),
-        trackedFolder: tracked.get(key(r.company, r.role)) || null,
-      }));
-      res.json({ days, rows });
+      const reviewed = readReviewed(DAILY_DIR);
+      const groups = rejectionGroups().map((g) => ({ ...g, reviewed: isReviewed(g, reviewed) }));
+      const unreviewed = groups.filter((g) => !g.reviewed).length;
+      if (req.query.summary) return res.json({ unreviewed });
+      const tracked = new Map((await store.listApplications()).map((r) => [postingKey(r.company, r.role), r.folder]));
+      res.json({
+        unreviewed,
+        groups: groups.map((g) => ({ ...g, trackedFolder: tracked.get(g.key) || null })),
+        trend: weeklyTrend(groups),
+      });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // POST /api/rejections/review { keys: [...], reviewed: true|false }
+  app.post("/api/rejections/review", (req, res) => {
+    try {
+      const { keys, reviewed = true } = req.body || {};
+      if (!Array.isArray(keys) || !keys.length || keys.some((k) => typeof k !== "string")) {
+        return res.status(400).json({ error: "keys must be a non-empty list of posting keys" });
+      }
+      const lastSeen = new Map(rejectionGroups().map((g) => [g.key, g.lastSeen]));
+      const marks = readReviewed(DAILY_DIR);
+      for (const key of keys) {
+        if (!reviewed) delete marks[key];
+        else if (lastSeen.has(key)) marks[key] = lastSeen.get(key);
+      }
+      mkdirSync(DAILY_DIR, { recursive: true });
+      writeFileAtomic(path.join(DAILY_DIR, REVIEWED_FILE), JSON.stringify(marks, null, 2) + "\n");
+      res.json({ ok: true, unreviewed: rejectionGroups().filter((g) => !isReviewed(g, marks)).length });
     } catch (err) {
       sendError(res, err);
     }

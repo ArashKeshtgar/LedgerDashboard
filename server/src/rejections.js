@@ -128,3 +128,88 @@ export function reasonBucket(row) {
   for (const [name, re] of REASON_BUCKETS) if (re.test(row.reason)) return name;
   return row.stage === "scored" ? "low score" : "other";
 }
+
+// --- one card per posting, reviewed marks, weekly trend ----------------------
+
+// Same company + same role = the same posting, whichever night it was seen.
+export function postingKey(company, role) {
+  const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  return `${norm(company)}|${norm(role)}`;
+}
+
+// Rows (newest report first) -> one entry per posting, newest sighting first.
+// The latest sighting's reason/score is the one shown; every night is kept.
+export function groupRejections(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const key = postingKey(r.company, r.role);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        company: r.company,
+        companyNote: r.companyNote || "",
+        role: r.role,
+        track: r.track,
+        stage: r.stage,
+        score: r.score,
+        reason: r.reason,
+        bucket: reasonBucket(r),
+        url: r.url,
+        firstSeen: r.date,
+        lastSeen: r.date,
+        nights: [],
+      });
+    }
+    const g = groups.get(key);
+    if (r.date < g.firstSeen) g.firstSeen = r.date;
+    if (r.date > g.lastSeen) g.lastSeen = r.date;
+    if (!g.url && r.url) g.url = r.url;
+    if (!g.companyNote && r.companyNote) g.companyNote = r.companyNote;
+    if (!g.nights.includes(r.date)) g.nights.push(r.date);
+  }
+  return [...groups.values()].sort(
+    (a, b) => b.lastSeen.localeCompare(a.lastSeen) || a.company.localeCompare(b.company)
+  );
+}
+
+// Reviewed marks: { "<posting key>": "<lastSeen date it was reviewed at>" }.
+// A posting the run turns down again AFTER it was reviewed shows up as new.
+// Lives in engine/daily/, which the truth-bank git and release.ps1 both
+// leave alone, so marking things reviewed never blocks a release.
+export const REVIEWED_FILE = "rejections_reviewed.json";
+
+export function readReviewed(dailyDir) {
+  try {
+    const data = JSON.parse(readFileSync(path.join(dailyDir, REVIEWED_FILE), "utf-8"));
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  } catch {
+    return {}; // missing or hand-broken file = nothing reviewed yet
+  }
+}
+
+export function isReviewed(group, reviewed) {
+  const at = reviewed[group.key];
+  return typeof at === "string" && at >= group.lastSeen;
+}
+
+// Weekly count of NEW postings rejected (by the week each was first seen),
+// per reason bucket, oldest week first.
+export function weeklyTrend(groups, weeks = 8) {
+  const weekOf = (iso) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+    return date.toISOString().slice(0, 10);
+  };
+  const byWeek = new Map();
+  for (const g of groups) {
+    const w = weekOf(g.firstSeen);
+    if (!byWeek.has(w)) byWeek.set(w, {});
+    const counts = byWeek.get(w);
+    counts[g.bucket] = (counts[g.bucket] || 0) + 1;
+  }
+  return [...byWeek.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-weeks)
+    .map(([week, counts]) => ({ week, counts, total: Object.values(counts).reduce((s, n) => s + n, 0) }));
+}

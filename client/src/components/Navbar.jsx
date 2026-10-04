@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { checkSession, fetchHealth, fetchUsage, logout } from "../api.js";
+import { checkSession, fetchHealth, fetchRejectionCount, fetchUsage, logout } from "../api.js";
 import { usd } from "../costs.js";
 
 export default function Navbar() {
@@ -33,6 +33,15 @@ export default function Navbar() {
   }, [pathname]);
   const spendPct = spend ? spend.usd / spend.budget : 0;
 
+  // Postings the nightly run turned down that haven't been reviewed yet.
+  const [rejected, setRejected] = useState(0);
+  useEffect(() => {
+    const refresh = () => fetchRejectionCount().then((r) => setRejected(r.unreviewed)).catch(() => {});
+    refresh();
+    window.addEventListener("rejections-changed", refresh);
+    return () => window.removeEventListener("rejections-changed", refresh);
+  }, [pathname]);
+
   return (
     <nav className="navbar navbar-dark bg-dark mb-4 app-navbar">
       <div className="container">
@@ -44,7 +53,10 @@ export default function Navbar() {
           <Link className={linkClass("/pipeline")} to="/pipeline">Pipeline</Link>
           <Link className={linkClass("/stats")} to="/stats">Stats</Link>
           <Link className={linkClass("/funnel")} to="/funnel">Funnel</Link>
-          <Link className={linkClass("/rejections")} to="/rejections">Rejected</Link>
+          <Link className={linkClass("/rejections")} to="/rejections">
+            Rejected
+            {rejected > 0 && <span className="badge rounded-pill ms-1 bg-secondary">{rejected}</span>}
+          </Link>
           <Link className={linkClass("/recruiters")} to="/recruiters">Recruiters</Link>
           <span className="navbar-divider" aria-hidden="true" />
           <Link className={linkClass("/truth")} to="/truth">Truth Bank</Link>

@@ -102,11 +102,24 @@ describe("applications are addressed by folder, not row position", () => {
       path.join(data.engine, "daily", "2026-10-03.md"),
       "## رد در پیش‌غربال\n| شرکت | عنوان | دلیل |\n|---|---|---|\n| Acme | Backend Developer | Python محور |\n| Initech | Dev | ۸+ سال |\n"
     );
-    const { rows } = await (await server.call("GET", "/api/rejections")).json();
-    expect(rows.map((r) => [r.company, r.bucket, r.trackedFolder])).toEqual([
-      ["Acme", "other stack", FOLDER_A],
-      ["Initech", "seniority", null],
+    const initechAgain = "## رد در پیش‌غربال\n| شرکت | عنوان | دلیل |\n|---|---|---|\n| Initech | Dev | ۱۰+ سال |\n";
+    writeFileSync(path.join(data.engine, "daily", "2026-10-04.md"), initechAgain);
+    const body = await (await server.call("GET", "/api/rejections")).json();
+    expect(body.unreviewed).toBe(2);
+    expect(body.groups.map((g) => [g.company, g.bucket, g.trackedFolder, g.nights.length])).toEqual([
+      ["Initech", "seniority", null, 2],
+      ["Acme", "other stack", FOLDER_A, 1],
     ]);
+    expect(body.trend.length).toBeGreaterThan(0);
+
+    const initech = body.groups[0].key;
+    const marked = await (await server.call("POST", "/api/rejections/review", { body: { keys: [initech] } })).json();
+    expect(marked.unreviewed).toBe(1);
+    expect((await (await server.call("GET", "/api/rejections?summary=1")).json()).unreviewed).toBe(1);
+    // Turned down again on a later night -> it counts as new again.
+    writeFileSync(path.join(data.engine, "daily", "2026-10-05.md"), initechAgain);
+    expect((await (await server.call("GET", "/api/rejections?summary=1")).json()).unreviewed).toBe(2);
+    expect((await server.call("POST", "/api/rejections/review", { body: { keys: [] } })).status).toBe(400);
   });
 
   it("lists earlier postings like this one with how each went", async () => {

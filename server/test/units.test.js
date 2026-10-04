@@ -12,7 +12,7 @@ import { runProcess } from "../src/process.js";
 import { slugify, weekStartISO } from "../src/text.js";
 import { resolveContact, ContactValidationError } from "../src/contact.js";
 import { buildFunnel, offerProbability, outcomeOf, scoreBand } from "../src/funnel.js";
-import { parseReport, reasonBucket } from "../src/rejections.js";
+import { groupRejections, isReviewed, parseReport, reasonBucket, weeklyTrend } from "../src/rejections.js";
 
 describe("csv", () => {
   it("quotes fields containing commas, quotes and line breaks", () => {
@@ -399,5 +399,35 @@ describe("rejections from daily reports", () => {
     expect(reasonBucket(mda)).toBe("clearance");
     expect(reasonBucket(opendoor)).toBe("other stack");
     expect(reasonBucket({ stage: "prescreen", reason: "۸+ سال", score: null })).toBe("seniority");
+  });
+});
+
+describe("rejection grouping", () => {
+  const row = (date, company, role, reason) => ({ date, company, role, reason, stage: "prescreen", score: null, track: "dev", url: "" });
+  const rows = [
+    row("2026-10-05", "Initech", "Dev", "۸+ سال"),
+    row("2026-10-03", "Acme", "Backend", "Python محور"),
+    row("2026-10-01", "initech ", "dev", "۸+ سال"),
+  ];
+
+  it("merges the same posting across nights, newest first", () => {
+    const g = groupRejections(rows);
+    expect(g.map((x) => [x.company, x.nights.length, x.firstSeen, x.lastSeen])).toEqual([
+      ["Initech", 2, "2026-10-01", "2026-10-05"],
+      ["Acme", 1, "2026-10-03", "2026-10-03"],
+    ]);
+  });
+
+  it("a review covers the nights seen so far, not later ones", () => {
+    const [initech] = groupRejections(rows);
+    expect(isReviewed(initech, { [initech.key]: "2026-10-05" })).toBe(true);
+    expect(isReviewed(initech, { [initech.key]: "2026-10-01" })).toBe(false);
+    expect(isReviewed(initech, {})).toBe(false);
+  });
+
+  it("counts new postings per week by reason", () => {
+    const trend = weeklyTrend(groupRejections(rows));
+    // 1 Oct is a Thursday (week of 28 Sep); 3 Oct a Saturday, same week.
+    expect(trend).toEqual([{ week: "2026-09-28", counts: { seniority: 1, "other stack": 1 }, total: 2 }]);
   });
 });

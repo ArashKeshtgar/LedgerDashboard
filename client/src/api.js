@@ -248,4 +248,7 @@ export const fetchUsage = (month) => request("GET", `/api/usage${month ? `?month
 export const fetchSimilar = (folder) => request("GET", `/api/applications/${encodeURIComponent(folder)}/similar`);
 
 export const fetchFunnel = () => request("GET", "/api/funnel");
-export const fetchRejections = (days) => request("GET", `/api/rejections${days ? `?days=${days}` : ""}`);
+export const fetchRejections = () => request("GET", "/api/rejections");
+export const fetchRejectionCount = () => request("GET", "/api/rejections?summary=1");
+export const reviewRejections = (keys, reviewed = true) =>
+  request("POST", "/api/rejections/review", { keys, reviewed });

@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { fetchApplications, fetchPipelineStages, moveApplicationStage } from "../api.js";
 import { TrackBadge, TrackTabs } from "../components/TrackBadge.jsx";
 import { trackOf } from "../track.js";
+import ActivityForecast from "../components/ActivityForecast.jsx";
+import { rejectedDay, sentDay } from "../dailyActivity.js";
 
 function matchChipClass(score) {
   const n = Number(score);
@@ -84,6 +86,8 @@ export default function ApplicationsList() {
   const [trackFilter, setTrackFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // A day picked on the activity panel: rows sent, found or rejected that day.
+  const [dayFilter, setDayFilter] = useState(null);
   const [approvingFolder, setApprovingFolder] = useState(null);
   const [approveError, setApproveError] = useState(null);
   const [scrollPos, setScrollPos] = useState({ index: 1, showTop: false });
@@ -117,7 +121,7 @@ export default function ApplicationsList() {
   useEffect(() => {
     if (scrollAreaRef.current) scrollAreaRef.current.scrollTop = 0;
     setScrollPos({ index: 1, showTop: false });
-  }, [query, stageFilter, sourceFilter, matchFilter, followupOnly, dateFrom, dateTo, trackFilter]);
+  }, [query, stageFilter, sourceFilter, matchFilter, followupOnly, dateFrom, dateTo, trackFilter, dayFilter]);
 
   const sources = useMemo(
     () => [...new Set(rows.map((r) => r.source).filter(Boolean))].sort(),
@@ -149,6 +153,7 @@ export default function ApplicationsList() {
     if (followupOnly && !r.needsFollowup) return false;
     if (dateFrom && r.date && r.date < dateFrom) return false;
     if (dateTo && r.date && r.date > dateTo) return false;
+    if (dayFilter && r.date?.slice(0, 10) !== dayFilter && sentDay(r) !== dayFilter && rejectedDay(r) !== dayFilter) return false;
     if (!matchTest(r.match_score)) return false;
     return (
       !q ||
@@ -167,6 +172,7 @@ export default function ApplicationsList() {
     setTrackFilter("all");
     setDateFrom("");
     setDateTo("");
+    setDayFilter(null);
   };
 
   const filtersActive =
@@ -177,7 +183,8 @@ export default function ApplicationsList() {
     followupOnly ||
     trackFilter !== "all" ||
     dateFrom ||
-    dateTo;
+    dateTo ||
+    dayFilter;
 
   async function handleApprove(folder) {
     setApproveError(null);
@@ -260,6 +267,8 @@ export default function ApplicationsList() {
         </div>
       )}
 
+      <ActivityForecast rows={rows} selectedDay={dayFilter} onSelectDay={setDayFilter} />
+
       <TrackTabs value={trackFilter} onChange={setTrackFilter} rows={rows} trackOf={trackOf} />
 
       <div className="pipeline-toolbar mb-3">
@@ -336,6 +345,17 @@ export default function ApplicationsList() {
           />
           <span className="form-check-label">⏰ Needs follow-up only</span>
         </label>
+
+        {dayFilter && (
+          <button
+            type="button"
+            className="btn btn-sm btn-warning rounded-pill"
+            onClick={() => setDayFilter(null)}
+            title="Rows sent, found or rejected on this day"
+          >
+            📅 {dayFilter} ✕
+          </button>
+        )}
 
         {filtersActive && (
           <button type="button" className="btn btn-sm btn-outline-secondary rounded-pill" onClick={resetFilters}>

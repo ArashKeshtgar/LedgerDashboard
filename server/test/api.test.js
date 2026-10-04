@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import path from "path";
 import { FOLDER_A, FOLDER_B, fakeAnthropic, makeDataDir, startApp, testConfig } from "./fixture.js";
 import { createCsvStore } from "../src/stores/csvStore.js";
@@ -90,6 +90,23 @@ describe("applications are addressed by folder, not row position", () => {
   it("uses the folder as the id", async () => {
     const rows = await (await server.call("GET", "/api/applications")).json();
     expect(rows.map((r) => r.id)).toEqual([FOLDER_A, FOLDER_B]);
+  });
+
+  it("serves the funnel and the nightly rejections, marking ones added anyway", async () => {
+    const funnel = await (await server.call("GET", "/api/funnel")).json();
+    expect(funnel.totals).toBeDefined();
+    expect(funnel.forecast.scenarios).toHaveLength(5);
+
+    mkdirSync(path.join(data.engine, "daily"), { recursive: true });
+    writeFileSync(
+      path.join(data.engine, "daily", "2026-10-03.md"),
+      "## رد در پیش‌غربال\n| شرکت | عنوان | دلیل |\n|---|---|---|\n| Acme | Backend Developer | Python محور |\n| Initech | Dev | ۸+ سال |\n"
+    );
+    const { rows } = await (await server.call("GET", "/api/rejections")).json();
+    expect(rows.map((r) => [r.company, r.bucket, r.trackedFolder])).toEqual([
+      ["Acme", "other stack", FOLDER_A],
+      ["Initech", "seniority", null],
+    ]);
   });
 
   it("lists earlier postings like this one with how each went", async () => {

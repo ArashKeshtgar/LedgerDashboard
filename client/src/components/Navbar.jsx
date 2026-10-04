@@ -43,6 +43,8 @@ export default function Navbar() {
           <Link className={linkClass("/")} to="/">Applications</Link>
           <Link className={linkClass("/pipeline")} to="/pipeline">Pipeline</Link>
           <Link className={linkClass("/stats")} to="/stats">Stats</Link>
+          <Link className={linkClass("/funnel")} to="/funnel">Funnel</Link>
+          <Link className={linkClass("/rejections")} to="/rejections">Rejected</Link>
           <Link className={linkClass("/recruiters")} to="/recruiters">Recruiters</Link>
           <span className="navbar-divider" aria-hidden="true" />
           <Link className={linkClass("/truth")} to="/truth">Truth Bank</Link>

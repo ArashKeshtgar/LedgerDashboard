@@ -246,3 +246,6 @@ export const fetchResumeBuilds = () => request("GET", "/api/resume/builds");
 
 export const fetchUsage = (month) => request("GET", `/api/usage${month ? `?month=${month}` : ""}`);
 export const fetchSimilar = (folder) => request("GET", `/api/applications/${encodeURIComponent(folder)}/similar`);
+
+export const fetchFunnel = () => request("GET", "/api/funnel");
+export const fetchRejections = (days) => request("GET", `/api/rejections${days ? `?days=${days}` : ""}`);

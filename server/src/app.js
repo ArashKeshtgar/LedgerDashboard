@@ -8,6 +8,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { FileLockedError } from "./csv.js";
 import { monthUsage, readUsage, recordUsage, summarize, usageRecord } from "./aiUsage.js";
 import { readPostings, similarTo } from "./similar.js";
+import { buildFunnel } from "./funnel.js";
+import { readRejections, reasonBucket } from "./rejections.js";
 import { isSafeFolderName, resolveApplicationFolder, UnsafeFolderError } from "./paths.js";
 import { attachPipeline, FOLLOWUP_KEY } from "./pipeline.js";
 import { passwordMatches, createLoginLimiter, originGuard } from "./security.js";
@@ -457,6 +459,34 @@ export function createApp(cfg, deps = {}) {
         ...p, company: byFolder.get(p.folder)?.company || "", role: byFolder.get(p.folder)?.role || "",
       }));
       res.json({ ...usage, budget: cfg.aiMonthlyBudget });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // GET /api/funnel - applied -> reply -> interview -> offer from live data,
+  // plus the 6-month offer forecast. Local, no model call.
+  app.get("/api/funnel", async (req, res) => {
+    try {
+      res.json(buildFunnel(await withPipeline(await store.listApplications())));
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // GET /api/rejections?days=N - postings the nightly run turned down, read
+  // from its daily reports, each marked if it was added to the ledger anyway.
+  app.get("/api/rejections", async (req, res) => {
+    try {
+      const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
+      const key = (company, role) => `${String(company).toLowerCase().trim()}|${String(role).toLowerCase().trim()}`;
+      const tracked = new Map((await store.listApplications()).map((r) => [key(r.company, r.role), r.folder]));
+      const rows = readRejections(path.join(ENGINE_DIR, "daily"), { days }).map((r) => ({
+        ...r,
+        bucket: reasonBucket(r),
+        trackedFolder: tracked.get(key(r.company, r.role)) || null,
+      }));
+      res.json({ days, rows });
     } catch (err) {
       sendError(res, err);
     }

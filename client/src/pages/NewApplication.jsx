@@ -1,21 +1,26 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { createApplication } from "../api.js";
 
-const SOURCES = ["linkedin", "indeed", "ziprecruiter", "company_site", "referral", "agency", "other"];
+// referral / agency / program (a newcomer program's job developer) are the
+// outreach channels the Funnel page compares against cold job boards.
+const SOURCES = ["linkedin", "indeed", "ziprecruiter", "jobbank", "company_site", "referral", "agency", "program", "other"];
 
 export default function NewApplication() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    company: "",
-    role: "",
+  // The Rejections page opens this form pre-filled (?company=&role=&notes=…)
+  // to add a posting the nightly run turned down.
+  const [params] = useSearchParams();
+  const [form, setForm] = useState(() => ({
+    company: params.get("company") || "",
+    role: params.get("role") || "",
     location: "",
     branch: "",
-    source: "linkedin",
-    posting_url: "",
+    source: SOURCES.includes(params.get("source")) ? params.get("source") : "linkedin",
+    posting_url: params.get("posting_url") || "",
     match_score: "",
-    notes: "",
-  });
+    notes: params.get("notes") || "",
+  }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 

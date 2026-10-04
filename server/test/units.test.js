@@ -11,6 +11,8 @@ import { loadConfig } from "../src/config.js";
 import { runProcess } from "../src/process.js";
 import { slugify, weekStartISO } from "../src/text.js";
 import { resolveContact, ContactValidationError } from "../src/contact.js";
+import { buildFunnel, offerProbability, outcomeOf, scoreBand } from "../src/funnel.js";
+import { parseReport, reasonBucket } from "../src/rejections.js";
 
 describe("csv", () => {
   it("quotes fields containing commas, quotes and line breaks", () => {
@@ -296,5 +298,106 @@ describe("similar postings", () => {
     expect(res[0].shared).toEqual(expect.arrayContaining(["c#", "azure", "sql-server", "banking"]));
     expect(res.find((r) => r.folder === "c")?.similarity ?? 0).toBeLessThan(res[0].similarity);
     expect(similarTo("missing", docs)).toEqual([]);
+  });
+});
+
+describe("funnel", () => {
+  const now = new Date(2026, 9, 30); // 30 Oct 2026, local
+  const row = (folder, stages, extra = {}) => ({
+    folder, track: "dev", source: "LinkedIn", match_score: "60",
+    stage: stages[stages.length - 1][0],
+    isTerminal: ["rejected", "no_response"].includes(stages[stages.length - 1][0]),
+    stageHistory: stages.map(([stage, date]) => ({ stage, date, note: "" })),
+    ...extra,
+  });
+
+  it("counts silence after 21 days as a settled no, and fresh ones as pending", () => {
+    const old = outcomeOf(row("a", [["draft", "2026-10-01"], ["applied", "2026-10-01"]]), now);
+    const fresh = outcomeOf(row("b", [["draft", "2026-10-20"], ["applied", "2026-10-20"]]), now);
+    expect(old).toMatchObject({ silent: true, settled: true, reply: false });
+    expect(fresh).toMatchObject({ silent: false, settled: false });
+  });
+
+  it("drafts never sent are not in the funnel; a later stage implies the earlier ones", () => {
+    expect(outcomeOf(row("d", [["draft", "2026-10-01"]]), now)).toBeNull();
+    const o = outcomeOf(row("i", [["draft", "2026-10-01"], ["applied", "2026-10-02"], ["technical_interview", "2026-10-10"]]), now);
+    expect(o).toMatchObject({ screen: true, interview: true, offer: false, settled: true, reply: true });
+  });
+
+  it("groups by lower-cased source and score band, and keeps IT apart", () => {
+    const rows = [
+      row("a", [["applied", "2026-10-01"]]),
+      row("b", [["applied", "2026-10-02"]], { source: "linkedin", match_score: "70" }),
+      row("c", [["applied", "2026-10-02"], ["rejected", "2026-10-05"]], { source: "agency" }),
+      row("t", [["applied", "2026-10-02"]], { track: "it" }),
+    ];
+    const f = buildFunnel(rows, now, { samples: 500 });
+    expect(f.totals.sent).toBe(3);
+    expect(f.it.sent).toBe(1);
+    expect(f.bySource.find((s) => s.key === "linkedin").sent).toBe(2);
+    expect(f.byBand.map((b) => b.key)).toEqual(["65+", "55–64"]);
+    expect(f.totals).toMatchObject({ rejected: 1, silent: 2, settled: 3, screens: 0 });
+  });
+
+  it("zero screens pull the screen-rate estimate below the 3% prior", () => {
+    const rows = Array.from({ length: 40 }, (_, i) => row(`r${i}`, [["applied", "2026-09-15"]]));
+    const f = buildFunnel(rows, now, { samples: 500 });
+    expect(f.forecast.screenRate.mean).toBeLessThan(0.03);
+    const p = f.forecast.scenarios.map((s) => s.probability);
+    expect(p[2]).toBeGreaterThan(p[1]); // more applications, better odds
+    expect(p[3]).toBeGreaterThan(p[1]); // better reply rate, better odds
+  });
+
+  it("forecast is deterministic and bounded", () => {
+    const args = { screenA: 1.5, screenB: 48.5, offerA: 3, offerB: 17, apps: 160, samples: 3000 };
+    expect(offerProbability(args)).toBe(offerProbability(args));
+    expect(offerProbability({ ...args, apps: 0 })).toBe(0);
+    expect(scoreBand("")).toBe("no score");
+    expect(scoreBand("64")).toBe("55–64");
+  });
+});
+
+describe("rejections from daily reports", () => {
+  const md = [
+    "## امتیاز تخمینی گرفتند",
+    "| شرکت | عنوان | امتیاز |",
+    "|---|---|---|",
+    "| Kept | Dev | 66 |",
+    "### 🕒 امتیاز گرفتند، بسته فردا",
+    "| شرکت | عنوان | امتیاز |",
+    "|---|---|---|",
+    "| Tomorrow | Dev | 70 |",
+    "## رد شده بعد از امتیازدهی",
+    "| شرکت | عنوان | امتیاز | دو شکاف اصلی |",
+    "|---|---|---|---|",
+    "| **Sagen** (Oakville) | Application Support Developer | 54 | Java و Apache Camel |",
+    "## رد در پیش‌غربال (دولوپری)",
+    "| شرکت | عنوان | دلیل |",
+    "|---|---|---|",
+    "| MDA Space | Full Stack Developer | ۱۰+ سال و clearance می‌خواهد |",
+    "### رد شده‌ی IT",
+    "| شرکت | عنوان | امتیاز | دلیل |",
+    "|---|---|---|---|",
+    "| Opendoor | IT Support Technician | 42 | پشتیبانی macOS و MDM |",
+    "## برای فردا — آگهی‌هایی که از پیش‌غربال رد شدند ولی امتیاز نگرفتند",
+    "| شرکت | عنوان | دلیل |",
+    "|---|---|---|",
+    "| Waiting | Dev | x |",
+  ].join("\n");
+
+  it("reads only rejection tables, with stage, score, reason and track", () => {
+    const rows = parseReport(md, "2026-10-03");
+    expect(rows.map((r) => r.company)).toEqual(["Sagen", "MDA Space", "Opendoor"]);
+    expect(rows[0]).toMatchObject({ companyNote: "Oakville", stage: "scored", score: 54, track: "dev", reason: "Java و Apache Camel" });
+    expect(rows[1]).toMatchObject({ stage: "prescreen", score: null });
+    expect(rows[2]).toMatchObject({ track: "it", score: 42 });
+  });
+
+  it("buckets reasons, a named stack beating a year count", () => {
+    const [sagen, mda, opendoor] = parseReport(md, "2026-10-03");
+    expect(reasonBucket(sagen)).toBe("other stack");
+    expect(reasonBucket(mda)).toBe("clearance");
+    expect(reasonBucket(opendoor)).toBe("other stack");
+    expect(reasonBucket({ stage: "prescreen", reason: "۸+ سال", score: null })).toBe("seniority");
   });
 });

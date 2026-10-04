@@ -15,6 +15,8 @@ import GapsPage from "./pages/GapsPage.jsx";
 import ResumePage, { BuiltResumePage } from "./pages/ResumePage.jsx";
 import HealthPage from "./pages/HealthPage.jsx";
 import CostsPage from "./pages/CostsPage.jsx";
+import FunnelPage from "./pages/FunnelPage.jsx";
+import RejectionsPage from "./pages/RejectionsPage.jsx";
 
 export default function App() {
   return (
@@ -33,6 +35,8 @@ export default function App() {
                 <Route path="/applications/:id" element={<ApplicationDetail />} />
                 <Route path="/pipeline" element={<PipelineBoard />} />
                 <Route path="/stats" element={<StatsPage />} />
+                <Route path="/funnel" element={<FunnelPage />} />
+                <Route path="/rejections" element={<RejectionsPage />} />
                 <Route path="/recruiters" element={<RecruitersBoard />} />
                 <Route path="/truth" element={<TruthBankPage />} />
                 <Route path="/gaps" element={<GapsPage />} />

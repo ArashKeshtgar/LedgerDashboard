@@ -271,6 +271,12 @@ describe("resume engine", () => {
     ]);
     const empty = await (await server.call("GET", "/api/usage?month=2001-01")).json();
     expect(empty).toMatchObject({ usd: 0, calls: 0, packages: [] });
+
+    const calls = await (await server.call("GET", "/api/usage/calls")).json();
+    expect(calls.calls.map((c) => c.kind)).toEqual(["analyze", "reanalyze"]);
+    expect(calls.calls[0]).toEqual({ at: expect.any(String), kind: "analyze", usd: 0.026, folder });
+    const none = await (await server.call("GET", "/api/usage/calls?since=2999-01-01")).json();
+    expect(none.calls).toEqual([]);
   });
 
   it("analyze drops a closed gap slug even when the model ignores the prompt", async () => {

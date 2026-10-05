@@ -95,3 +95,19 @@ export function monthUsage(applicationsDir, month) {
   }), { usd: 0, calls: 0, byKind: {} });
   return { month, ...all, usd: Math.round(all.usd * 10000) / 10000, packages: perFolder };
 }
+
+// Every call since `since` (an ISO date or timestamp), flat, for the
+// Applications page's day cards. Only the time, kind and price leave the
+// server; the client buckets by its own local day, since `at` is UTC.
+export function usageCalls(applicationsDir, since) {
+  const folders = existsSync(applicationsDir)
+    ? readdirSync(applicationsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
+    : [];
+  const out = [];
+  for (const folder of folders) {
+    for (const c of readUsage(path.join(applicationsDir, folder))) {
+      if ((c.at || "") >= since) out.push({ at: c.at, kind: c.kind, usd: c.usd || 0, folder });
+    }
+  }
+  return out.sort((a, b) => a.at.localeCompare(b.at));
+}

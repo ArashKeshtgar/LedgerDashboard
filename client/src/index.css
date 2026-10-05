@@ -1089,6 +1089,15 @@ tr.fact-highlight > td {
 .wx-values { display: flex; flex-direction: column; align-items: flex-end; }
 .wx-big { font-size: 1.35rem; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
 .wx-small { font-size: 0.72rem; color: var(--wx-text-3); white-space: nowrap; }
+.wx-cost {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--wx-text-3);
+  text-align: right;
+  white-space: nowrap;
+}
+.wx-cost.spent { color: var(--wx-text); font-weight: 600; }
+.wx-tip-cost { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border-soft); }
 
 .wx-chart-card {
   border: 1px solid var(--border-soft);

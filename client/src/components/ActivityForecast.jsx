@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addDays, dailyActivity, isoDay, parseDay } from "../dailyActivity.js";
+import { fetchUsageCalls } from "../api.js";
+import {
+  COST_KIND_LABEL, COST_TRACKED_FROM, addDays, dailyActivity, dailyCost, formatUsd, isoDay, parseDay,
+} from "../dailyActivity.js";
 
 // A weather-forecast style panel for the Applications page: a strip of day
 // cards (one week, paged with the arrows), a smooth chart of the chosen
@@ -12,6 +15,7 @@ const METRICS = [
   { key: "found", label: "Found", unit: "found", icon: "🔎" },
   { key: "rejected", label: "Rejections", unit: "rejected", icon: "❌" },
   { key: "score", label: "Match score", unit: "avg score", icon: "🎯" },
+  { key: "cost", label: "Claude cost", unit: "Claude API", icon: "💲" },
 ];
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -78,11 +82,27 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
   const [hover, setHover] = useState(null);
   const chartRef = useRef(null);
   const width = useWidth(chartRef);
+  const [calls, setCalls] = useState(null); // null = not loaded / unavailable
+
+  useEffect(() => {
+    let live = true;
+    fetchUsageCalls(COST_TRACKED_FROM)
+      .then((r) => live && setCalls(r.calls || []))
+      .catch(() => live && setCalls(null));
+    return () => { live = false; };
+  }, []);
+  const costByDay = useMemo(() => dailyCost(calls), [calls]);
+  // A day's Claude bill, or null where nothing could have been recorded.
+  const costOf = (day) => (calls === null || day < COST_TRACKED_FROM || day > today ? null : costByDay.get(day)?.usd || 0);
+  const costLines = (day) =>
+    Object.entries(costByDay.get(day)?.byKind || {}).map(([k, usd]) => `${COST_KIND_LABEL[k] || k} ${formatUsd(usd)}`);
 
   if (!days.length) return null;
   const firstDay = days[0].day;
   const m = METRICS.find((x) => x.key === metric);
-  const value = (d) => (d ? (metric === "score" ? d.score : d[metric]) : metric === "score" ? null : 0);
+  const value = (d, day) =>
+    metric === "cost" ? costOf(day) : d ? (metric === "score" ? d.score : d[metric]) : metric === "score" ? null : 0;
+  const fmt = (v) => (v === null ? "—" : metric === "cost" ? formatUsd(v) : v);
 
   const week = Array.from({ length: 7 }, (_, i) => addDays(weekEnd, i - 6));
   const canBack = week[0] > firstDay;
@@ -93,9 +113,13 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
   const H = 230, top = 54, bottom = 186, left = 34, right = 14;
   const plotW = width - left - right;
   const x = (i) => left + (plotW * (i + 0.5)) / CHART_DAYS;
-  const vals = windowDays.map((day) => value(byDay.get(day)));
-  const maxVal = metric === "score" ? 100 : Math.max(4, ...vals.filter((v) => v !== null));
-  const niceMax = metric === "score" ? 100 : Math.ceil(maxVal / 2) * 2;
+  const vals = windowDays.map((day) => value(byDay.get(day), day));
+  const maxVal =
+    metric === "score" ? 100 : Math.max(metric === "cost" ? 0.2 : 4, ...vals.filter((v) => v !== null));
+  const niceMax =
+    metric === "score" ? 100
+      : metric === "cost" ? (maxVal <= 1 ? Math.ceil(maxVal * 5) / 5 : Math.ceil(maxVal * 2) / 2)
+        : Math.ceil(maxVal / 2) * 2;
   const y = (v) => bottom - ((bottom - top) * v) / niceMax;
   const ticks = metric === "score" ? [0, 50, 100] : [0, niceMax / 2, niceMax];
 
@@ -115,6 +139,7 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
   const weekStartIdx = windowDays.indexOf(week[0]);
   const labelEvery = width < 640 ? 3 : width < 900 ? 2 : 1;
   const weekSent = week.reduce((s, day) => s + (byDay.get(day)?.sent || 0), 0);
+  const weekCost = week.reduce((s, day) => s + (costOf(day) || 0), 0);
 
   // Days in a row, up to today, with at least one application sent.
   let streak = 0;
@@ -150,6 +175,7 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
         </div>
         <div className="wx-summary">
           This week: <strong>{weekSent}</strong> sent
+          {calls !== null && <span className="ms-2">· <strong>{formatUsd(weekCost)}</strong> Claude</span>}
           {streak > 1 && <span className="ms-2">🔥 {streak}-day streak</span>}
         </div>
       </div>
@@ -159,7 +185,8 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
         <div className="wx-cards">
           {week.map((day) => {
             const d = byDay.get(day);
-            const v = value(d);
+            const v = value(d, day);
+            const cost = costOf(day);
             const future = day > today;
             const before = day < firstDay;
             return (
@@ -169,7 +196,11 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
                 className={`wx-card ${selectedDay === day ? "selected" : ""} ${day === today ? "today" : ""}`}
                 disabled={future}
                 onClick={() => onSelectDay(selectedDay === day ? null : day)}
-                title={d ? `${day}: ${d.sent} sent · ${d.found} found · ${d.rejected} rejected` : day}
+                title={[
+                  d ? `${day}: ${d.sent} sent · ${d.found} found · ${d.rejected} rejected` : day,
+                  cost !== null && `Claude API: ${formatUsd(cost)}`,
+                  ...costLines(day).map((l) => `  ${l}`),
+                ].filter(Boolean).join("\n")}
               >
                 <div className="wx-card-top">
                   <span>{parseDay(day).getDate()}</span>
@@ -178,10 +209,13 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
                 <div className="wx-card-body">
                   <span className="wx-icon" aria-hidden="true">{before || future ? "·" : dayIcon(d)}</span>
                   <span className="wx-values">
-                    <span className="wx-big">{v === null ? "—" : v}</span>
+                    <span className="wx-big">{fmt(v)}</span>
                     <span className="wx-small">{metric === "sent" ? `${d?.found || 0} found` : m.unit}</span>
                   </span>
                 </div>
+                {metric !== "cost" && cost !== null && (
+                  <div className={`wx-cost ${cost > 0 ? "spent" : ""}`}>💲 {formatUsd(cost)}</div>
+                )}
               </button>
             );
           })}
@@ -228,7 +262,7 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={left} x2={width - right} y1={y(t)} y2={y(t)} stroke="var(--wx-grid)" />
-                <text x={left - 6} y={y(t) + 4} textAnchor="end" className="wx-axis">{t}</text>
+                <text x={left - 6} y={y(t) + 4} textAnchor="end" className="wx-axis">{metric === "cost" ? `$${+t.toFixed(2)}` : t}</text>
               </g>
             ))}
 
@@ -241,7 +275,7 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
                     {day === today ? "Today" : WEEKDAY[parseDay(day).getDay()]}
                   </text>
                   <text x={x(i)} y={30} textAnchor="middle" className="wx-axis">{parseDay(day).getDate()}</text>
-                  <text x={x(i)} y={46} textAnchor="middle" className="wx-val">{v === null || day > today ? "" : v}</text>
+                  <text x={x(i)} y={46} textAnchor="middle" className="wx-val">{v === null || day > today ? "" : metric === "cost" ? (v ? formatUsd(v) : "") : v}</text>
                 </g>
               ) : null;
             })}
@@ -312,6 +346,12 @@ export default function ActivityForecast({ rows, selectedDay, onSelectDay }) {
                   <div><strong>{hd?.found || 0}</strong> found</div>
                   <div><strong>{hd?.rejected || 0}</strong> rejected</div>
                   <div><strong>{hd?.score ?? "—"}</strong> avg match score</div>
+                  {costOf(hovered) !== null && (
+                    <div className="wx-tip-cost">
+                      <strong>{formatUsd(costOf(hovered))}</strong> Claude API
+                      {costLines(hovered).map((l) => <div key={l} className="wx-muted small">{l}</div>)}
+                    </div>
+                  )}
                 </>
               )}
             </div>

@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { FileLockedError, writeFileAtomic } from "./csv.js";
-import { monthUsage, readUsage, recordUsage, summarize, usageRecord } from "./aiUsage.js";
+import { monthUsage, readUsage, recordUsage, summarize, usageCalls, usageRecord } from "./aiUsage.js";
 import { readPostings, similarTo } from "./similar.js";
 import { buildFunnel } from "./funnel.js";
 import {
@@ -461,6 +461,19 @@ export function createApp(cfg, deps = {}) {
         ...p, company: byFolder.get(p.folder)?.company || "", role: byFolder.get(p.folder)?.role || "",
       }));
       res.json({ ...usage, budget: cfg.aiMonthlyBudget });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // GET /api/usage/calls?since=YYYY-MM-DD - every Claude call since then
+  // (default: 120 days back), for the per-day cost on the day cards.
+  app.get("/api/usage/calls", (req, res) => {
+    try {
+      const since = /^\d{4}-\d{2}-\d{2}$/.test(req.query.since || "")
+        ? req.query.since
+        : new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
+      res.json({ since, calls: usageCalls(APPLICATIONS_DIR, since) });
     } catch (err) {
       sendError(res, err);
     }

@@ -64,3 +64,36 @@ export function dailyActivity(rows, today = isoDay(new Date())) {
   }
   return out;
 }
+
+// Claude API cost per local day, from /api/usage/calls. Cost tracking began
+// on COST_TRACKED_FROM; earlier days have no record, not a zero bill.
+export const COST_TRACKED_FROM = "2026-10-03";
+
+export const COST_KIND_LABEL = {
+  analyze: "Analyze",
+  reanalyze: "Re-analyze",
+  build: "Build package",
+  "build-repair": "Build repair",
+};
+
+export function dailyCost(calls) {
+  const days = new Map();
+  for (const c of calls || []) {
+    const at = new Date(c.at);
+    if (isNaN(at)) continue;
+    const day = isoDay(at);
+    if (!days.has(day)) days.set(day, { usd: 0, calls: 0, byKind: {} });
+    const d = days.get(day);
+    d.usd += c.usd || 0;
+    d.calls++;
+    d.byKind[c.kind] = (d.byKind[c.kind] || 0) + (c.usd || 0);
+  }
+  return days;
+}
+
+export function formatUsd(usd) {
+  if (usd == null) return "—";
+  if (usd === 0) return "$0";
+  if (usd < 0.01) return "<$0.01";
+  return `$${usd.toFixed(2)}`;
+}

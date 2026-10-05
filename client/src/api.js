@@ -245,6 +245,7 @@ export const restoreHealthIssues = () => request("DELETE", "/api/health/dismiss"
 export const fetchResumeBuilds = () => request("GET", "/api/resume/builds");
 
 export const fetchUsage = (month) => request("GET", `/api/usage${month ? `?month=${month}` : ""}`);
+export const fetchUsageCalls = (since) => request("GET", `/api/usage/calls${since ? `?since=${since}` : ""}`);
 export const fetchSimilar = (folder) => request("GET", `/api/applications/${encodeURIComponent(folder)}/similar`);
 
 export const fetchFunnel = () => request("GET", "/api/funnel");

@@ -158,6 +158,14 @@ export async function buildPackage(fields) {
     err.details = body.details;
     throw err;
   }
+  // Built even though the guardian still objected after its repair turn —
+  // the text needs a human look before it is sent anywhere.
+  if (body.guardian_warnings?.length) {
+    window.alert(
+      "Built WITH guardian warnings — check the résumé before sending:\n\n" +
+        body.guardian_warnings.join("\n")
+    );
+  }
   return body;
 }
 

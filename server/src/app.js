@@ -1178,21 +1178,40 @@ export function createApp(cfg, deps = {}) {
         ];
       }
 
+      // Every rejection is kept in the folder and the log: the 422 used to
+      // reach only the browser, so a paid build could fail with no trace of why.
+      const buildErrorPath = path.join(folderPath, "build_error.json");
+      const saveBuildError = (stage, details) => {
+        writeFileSync(
+          buildErrorPath,
+          JSON.stringify({ at: new Date().toISOString(), stage, details }, null, 2),
+          "utf-8"
+        );
+        console.log(`[build] ${folder} ${stage}:\n  ${details.join("\n  ")}`);
+      };
+
+      // Still rejected after the repair turn: both calls are already paid
+      // for, so the package is built anyway and the guardian's errors become
+      // warnings to review (build_error.json + plan.json) before sending.
+      let guardianWarnings = [];
       if (validation.status !== 0) {
-        unlinkSync(planPath);
-        return res.status(422).json({
-          error: "The generated package failed guardian validation",
-          details: (validation.stdout || validation.stderr || "").split("\n").filter(Boolean),
-        });
+        guardianWarnings = (validation.stdout || validation.stderr || "").split("\n").filter(Boolean);
+        saveBuildError("guardian-warning", guardianWarnings);
+      } else if (existsSync(buildErrorPath)) {
+        unlinkSync(buildErrorPath);
       }
 
-      // Guardian passed — render into the folder /analyze already created.
+      // Render into the folder /analyze already created.
       const build = await runProcess(python, [path.join(ENGINE_DIR, "build.py"), planPath, folderPath], {
         timeoutMs: cfg.buildTimeoutMs ?? BUILD_TIMEOUT_MS,
       });
 
       if (build.status !== 0) {
         unlinkSync(planPath);
+        saveBuildError(build.timedOut ? "build-timeout" : "build-failed", [
+          ...guardianWarnings,
+          ...(build.stdout || build.stderr || "").split("\n").filter(Boolean),
+        ]);
         return res.status(build.timedOut ? 504 : 500).json({
           error: build.timedOut ? "build.py timed out" : "build.py failed",
           folder,
@@ -1212,6 +1231,7 @@ export function createApp(cfg, deps = {}) {
           {
             built_at: new Date().toISOString(),
             ...plan,
+            ...(guardianWarnings.length ? { guardian_warnings: guardianWarnings } : {}),
             facts_used: Object.fromEntries(usedIds.map((id) => [id, current.get(id) ?? null])),
           },
           null,
@@ -1246,7 +1266,7 @@ export function createApp(cfg, deps = {}) {
       await updateApplicationRowByFolder(folder, refreshedFields);
 
       const updated = await withPipelineFor(folder);
-      res.status(201).json(updated);
+      res.status(201).json(guardianWarnings.length ? { ...updated, guardian_warnings: guardianWarnings } : updated);
     } catch (err) {
       sendError(res, err);
     }

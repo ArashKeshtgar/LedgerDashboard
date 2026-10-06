@@ -556,7 +556,7 @@ describe("resume engine", () => {
     expect((await first).status).toBe(201);
   });
 
-  it("gives a guardian-rejected package one repair turn with the errors, then gives up", async () => {
+  it("gives a guardian-rejected package one repair turn, then builds it with the errors as warnings", async () => {
     // Stand-in guardian: rejects until a marker file exists, which the test
     // creates between the two model calls.
     const marker = path.join(data.engine, "ok.marker");
@@ -583,9 +583,21 @@ describe("resume engine", () => {
 
     rmSync(marker);
     repairable = false;
-    const failed = await server.call("POST", "/api/packages/build", { body });
-    expect(failed.status).toBe(422);
+    const warned = await server.call("POST", "/api/packages/build", { body });
+    expect(warned.status).toBe(201);
     expect(anthropic.calls).toHaveLength(4);
+    expect((await warned.json()).guardian_warnings[0]).toContain("'ensuring'");
+    const folderPath = path.join(data.engine, "applications", FOLDER_A);
+    const saved = JSON.parse(readFileSync(path.join(folderPath, "build_error.json"), "utf-8"));
+    expect(saved.stage).toBe("guardian-warning");
+    expect(saved.details[0]).toContain("'ensuring'");
+    const plan = JSON.parse(readFileSync(path.join(folderPath, "plan.json"), "utf-8"));
+    expect(plan.guardian_warnings[0]).toContain("'ensuring'");
+
+    // A clean build afterwards clears the stale warning file.
+    writeFileSync(marker, "");
+    expect((await server.call("POST", "/api/packages/build", { body })).status).toBe(201);
+    expect(existsSync(path.join(folderPath, "build_error.json"))).toBe(false);
   });
 
   it("sends a package that drops an employment role back for repair", async () => {
@@ -602,9 +614,10 @@ describe("resume engine", () => {
         postingText: "posting", base_variant: "dotnet_azure",
       },
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(201);
     expect(anthropic.calls).toHaveLength(2);
     expect(anthropic.calls[1].messages.at(-1).content[0].content).toContain("exp.acme");
+    expect((await res.json()).guardian_warnings[0]).toContain("exp.acme");
   });
 
   it("kills a hung validate step and answers 504 instead of hanging", async () => {

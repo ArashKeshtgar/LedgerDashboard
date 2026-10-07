@@ -62,6 +62,7 @@ export default function Navbar() {
           <Link className={linkClass("/truth")} to="/truth">Truth Bank</Link>
           <Link className={linkClass("/gaps")} to="/gaps">Gaps</Link>
           <Link className={linkClass("/resume")} to="/resume">Résumé</Link>
+          <Link className={linkClass("/eval")} to="/eval">Evaluation</Link>
           <Link className={linkClass("/costs")} to="/costs">
             Costs
             {spend && (

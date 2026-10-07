@@ -21,6 +21,7 @@ import { RECRUITER_DATE_FIELDS } from "./stores/shape.js";
 import { CONTACT_FIELDS, ContactValidationError, resolveContact } from "./contact.js";
 import { isStoreValidationError } from "./stores/sqlStore.js";
 import { registerTruthRoutes } from "./truthRoutes.js";
+import { registerEvalRoutes } from "./evalRoutes.js";
 import { bankFingerprint, gapStatus, readFacts } from "./truthBank.js";
 
 const VALIDATE_TIMEOUT_MS = 30_000;
@@ -1408,6 +1409,7 @@ export function createApp(cfg, deps = {}) {
   });
 
   registerTruthRoutes(app, { cfg, store, withPipeline, sendError, engineDir: ENGINE_DIR, git: deps.engineGit });
+  registerEvalRoutes(app, { store, withPipeline, sendError, engineDir: ENGINE_DIR });
 
   // Serve the built React app (so no dev server / Vite is needed to use this)
   if (existsSync(cfg.clientDist)) {

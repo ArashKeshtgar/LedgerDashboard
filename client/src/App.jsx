@@ -17,6 +17,7 @@ import HealthPage from "./pages/HealthPage.jsx";
 import CostsPage from "./pages/CostsPage.jsx";
 import FunnelPage from "./pages/FunnelPage.jsx";
 import RejectionsPage from "./pages/RejectionsPage.jsx";
+import EvalPage from "./pages/EvalPage.jsx";
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
                 <Route path="/resume/:folder" element={<BuiltResumePage />} />
                 <Route path="/health" element={<HealthPage />} />
                 <Route path="/costs" element={<CostsPage />} />
+                <Route path="/eval" element={<EvalPage />} />
               </Routes>
             </div>
           </main>

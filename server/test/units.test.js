@@ -12,6 +12,7 @@ import { runProcess } from "../src/process.js";
 import { slugify, weekStartISO } from "../src/text.js";
 import { resolveContact, ContactValidationError } from "../src/contact.js";
 import { buildFunnel, offerProbability, outcomeOf, scoreBand } from "../src/funnel.js";
+import { confusion, evaluate } from "../src/evaluation.js";
 import { groupRejections, isReviewed, parseReport, reasonBucket, weeklyTrend } from "../src/rejections.js";
 
 describe("csv", () => {
@@ -429,5 +430,37 @@ describe("rejection grouping", () => {
     const trend = weeklyTrend(groupRejections(rows));
     // 1 Oct is a Thursday (week of 28 Sep); 3 Oct a Saturday, same week.
     expect(trend).toEqual([{ week: "2026-09-28", counts: { seniority: 1, "other stack": 1 }, total: 2 }]);
+  });
+});
+
+describe("evaluation", () => {
+  const item = (label, score, source = "engine", recommendation = null) =>
+    ({ folder: `f${score}${label}`, label, score, source, recommendation });
+
+  it("counts the confusion matrix of score >= threshold against the labels", () => {
+    const m = confusion([item("apply", 80), item("apply", 60), item("skip", 75), item("skip", 30)], 70);
+    expect(m).toMatchObject({ n: 4, tp: 1, fn: 1, fp: 1, tn: 1, accuracy: 50, precision: 50, recall: 50 });
+  });
+
+  it("reports per source, skips unlabeled items and lists the biggest misses first", () => {
+    const report = evaluate(
+      [
+        item("apply", 85), item("skip", 40), item("apply", 50, "nightly-estimate"),
+        item("skip", 72, "nightly-estimate"), item(null, 90), item("apply", NaN, "legacy"),
+      ],
+      70
+    );
+    expect(report).toMatchObject({ total: 6, labeled: 5, unlabeled: 1, apply: 3, skip: 2, noScore: 1 });
+    expect(report.overall).toMatchObject({ n: 4, accuracy: 50 });
+    expect(report.bySource.engine.accuracy).toBe(100);
+    expect(report.bySource["nightly-estimate"].accuracy).toBe(0);
+    expect(report.mistakes.map((m) => [m.score, m.kind])).toEqual([[50, "missed"], [72, "false_alarm"]]);
+    // 45-50 and 75-85 all reach 75%; the tie goes to the one nearest 70.
+    expect(report.overall.best).toEqual({ threshold: 75, accuracy: 75 });
+  });
+
+  it("scores the model's recommendation field where it has one", () => {
+    const report = evaluate([item("apply", 80, "engine", "apply_with_caveats"), item("skip", 80, "engine", "apply")]);
+    expect(report.recommendation).toEqual({ n: 2, agree: 1, accuracy: 50 });
   });
 });

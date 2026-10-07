@@ -248,6 +248,10 @@ export const fetchBuiltResume = (folder) =>
   request("GET", `/api/applications/${encodeURIComponent(folder)}/resume`);
 
 export const fetchHealth = () => request("GET", "/api/health");
+export const fetchEvalItems = () => request("GET", "/api/eval/items");
+export const saveEvalLabel = (folder, label, note) =>
+  request("PUT", `/api/eval/labels/${encodeURIComponent(folder)}`, { label, note });
+export const fetchEvalReport = (threshold) => request("GET", `/api/eval/report?threshold=${threshold}`);
 export const dismissHealthIssue = (key) => request("POST", "/api/health/dismiss", { key });
 export const restoreHealthIssues = () => request("DELETE", "/api/health/dismiss");
 export const fetchResumeBuilds = () => request("GET", "/api/resume/builds");

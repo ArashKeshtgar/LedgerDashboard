@@ -45,6 +45,44 @@ afterEach(async () => {
 const start = (cfg, deps = {}) => startApp(cfg, { ...deps, store });
 const ledgerFolders = async () => (await store.listApplications()).map((r) => r.folder);
 
+describe("evaluation", () => {
+  const appDir = (f) => path.join(data.engine, "applications", f);
+  beforeEach(async () => {
+    writeFileSync(path.join(appDir(FOLDER_A), "posting.txt"), "C# developer wanted", "utf-8");
+    writeFileSync(
+      path.join(appDir(FOLDER_A), "analysis.json"),
+      JSON.stringify({ source: "engine", match_score: 82, recommendation: "apply" }),
+      "utf-8"
+    );
+    server = await start(testConfig(data.root));
+  });
+
+  it("serves the labeling queue without the model's score", async () => {
+    const items = await (await server.call("GET", "/api/eval/items")).json();
+    expect(items.map((i) => i.folder)).toEqual([FOLDER_A]); // FOLDER_B has no posting
+    expect(items[0]).toMatchObject({ posting: "C# developer wanted", label: null });
+    expect(JSON.stringify(items)).not.toMatch(/82|match_score|recommendation/);
+  });
+
+  it("saves, reports and clears a label", async () => {
+    const put = (body) => server.call("PUT", `/api/eval/labels/${FOLDER_A}`, { body });
+    expect((await put({ label: "maybe" })).status).toBe(400);
+    expect((await server.call("PUT", `/api/eval/labels/${FOLDER_B}`, { body: { label: "skip" } })).status).toBe(404);
+
+    expect((await put({ label: "skip", note: "too senior" })).status).toBe(200);
+    expect(JSON.parse(readFileSync(path.join(appDir(FOLDER_A), "eval_label.json"), "utf-8")))
+      .toMatchObject({ label: "skip", note: "too senior" });
+
+    const report = await (await server.call("GET", "/api/eval/report?threshold=70")).json();
+    expect(report).toMatchObject({ labeled: 1, skip: 1 });
+    expect(report.overall).toMatchObject({ fp: 1, accuracy: 0 });
+    expect(report.mistakes[0]).toMatchObject({ folder: FOLDER_A, kind: "false_alarm", score: 82 });
+
+    expect((await put({ label: null })).status).toBe(200);
+    expect(existsSync(path.join(appDir(FOLDER_A), "eval_label.json"))).toBe(false);
+  });
+});
+
 describe("cross-origin guard", () => {
   beforeEach(async () => {
     server = await start(testConfig(data.root));

@@ -16,6 +16,12 @@ export function createEngineGit(engineDir, { gitCommand = "git" } = {}) {
   async function commit(paths, message) {
     if (!enabled()) return null;
     const add = await git(["add", "--", ...paths]);
+    // No git binary (an image built without it): the file is already saved,
+    // so the save shouldn't answer 500 — it just goes unrecorded.
+    if (add.status === null && /ENOENT/.test(add.stderr)) {
+      console.warn(`[engine-git] git not found — "${message}" saved without a commit`);
+      return null;
+    }
     if (add.status !== 0) throw new Error(`git add failed: ${add.stderr || add.stdout}`);
     const staged = await git(["diff", "--cached", "--quiet", "--", ...paths]);
     if (staged.status === 0) return null; // nothing actually changed

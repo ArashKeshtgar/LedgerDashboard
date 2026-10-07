@@ -7,6 +7,7 @@ import {
   deleteFact, gapStatus, readFacts, renderFact, saveFact, saveGap, TruthBankError,
 } from "../src/truthBank.js";
 import { computeHealth, mentions } from "../src/health.js";
+import { createEngineGit } from "../src/engineGit.js";
 import { FOLDER_A, FOLDER_B, fakeAnthropic, makeDataDir, startApp, testConfig } from "./fixture.js";
 
 const fact = (id, over = {}) => ({
@@ -285,6 +286,16 @@ describe("truth bank API", () => {
     expect(etl.label).toBe("SSIS — still open");
     expect(etl.counts).toMatchObject({ total: 1, draft: 1 });
     expect(gaps.find((g) => g.slug === "unknown-gap").status).toBe("undefined");
+  });
+
+  it("still saves (200, no commit) when the git binary is missing", async () => {
+    gitInit();
+    const engineGit = createEngineGit(data.engine, { gitCommand: "no-such-git-binary" });
+    server = await startApp(testConfig(data.root), { engineGit });
+    const res = await server.call("PUT", "/api/gaps/etl-ssis", { body: { label: "SSIS — edited" } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).commit).toBeNull();
+    expect(readFileSync(path.join(data.engine, "gap_tags.yml"), "utf-8")).toContain("SSIS — edited");
   });
 
   it("merges a gap into another: rows, saved analyses, dictionary, alias and one commit", async () => {

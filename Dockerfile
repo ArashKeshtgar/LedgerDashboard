@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python-is-python3 \
     python3-pip \
     libreoffice \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --break-system-packages python-docx pyyaml
@@ -37,10 +38,22 @@ COPY server ./server
 # NODE_ENV=production turns on Secure cookies and hides internal error
 # details from API responses. The mount point is created owned by the
 # unprivileged `node` user so a fresh volume is writable without root.
+#
+# git: every truth-bank save from the dashboard is a commit in the mounted
+# engine/.git. That repo is owned by the host's deploy user, not this
+# container's uid, so git's ownership check is turned off for it, and the
+# commits get a fixed author.
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     JOBSEARCH_DATA_DIR=/data/JobSearch \
-    PYTHON=python3
+    PYTHON=python3 \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=safe.directory \
+    GIT_CONFIG_VALUE_0=* \
+    GIT_AUTHOR_NAME="Ledger Dashboard" \
+    GIT_AUTHOR_EMAIL=dashboard@ledger.local \
+    GIT_COMMITTER_NAME="Ledger Dashboard" \
+    GIT_COMMITTER_EMAIL=dashboard@ledger.local
 RUN mkdir -p /data/JobSearch && chown -R node:node /data
 
 USER node

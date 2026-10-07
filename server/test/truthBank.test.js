@@ -287,6 +287,34 @@ describe("truth bank API", () => {
     expect(gaps.find((g) => g.slug === "unknown-gap").status).toBe("undefined");
   });
 
+  it("merges a gap into another: rows, saved analyses, dictionary, alias and one commit", async () => {
+    const run = gitInit();
+    writeFileSync(path.join(data.engine, "gap_tags.yml"), 'etl-ssis: "ETL with SSIS"\nold-etl: "SSIS again"\nalpha-gap: "covered by proj.alpha.one بسته شد"\n');
+    run("add", "gap_tags.yml");
+    run("commit", "-q", "-m", "two etl slugs");
+    server = await startApp(testConfig(data.root));
+    await server.call("PATCH", `/api/applications/${FOLDER_A}`, { body: { gap_tags: "old-etl,etl-ssis" } });
+    await server.call("PATCH", `/api/applications/${FOLDER_B}`, { body: { gap_tags: "old-etl" } });
+    const analysisPath = path.join(data.engine, "applications", FOLDER_B, "analysis.json");
+    writeFileSync(analysisPath, JSON.stringify({ match_score: 60, gap_tags: ["old-etl"] }));
+
+    expect((await server.call("POST", "/api/gaps/old-etl/merge", { body: { into: "nope" } })).status).toBe(404);
+    const res = await server.call("POST", "/api/gaps/old-etl/merge", { body: { into: "etl-ssis" } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).updated).toBe(2);
+
+    const gaps = await (await server.call("GET", "/api/gaps")).json();
+    expect(gaps.find((g) => g.slug === "old-etl")).toBeUndefined();
+    expect(gaps.find((g) => g.slug === "etl-ssis").counts.total).toBe(2);
+    expect(JSON.parse(readFileSync(analysisPath, "utf-8")).gap_tags).toEqual(["etl-ssis"]);
+    expect(readFileSync(path.join(data.engine, "gap_aliases.yml"), "utf-8")).toContain("old-etl: etl-ssis");
+    expect(run("log", "-1", "--format=%s").stdout.trim()).toBe("Merge gap old-etl into etl-ssis");
+
+    // A later save that still uses the old slug is mapped to the new one.
+    await server.call("PATCH", `/api/applications/${FOLDER_A}`, { body: { gap_tags: "old-etl" } });
+    expect((await (await server.call("GET", "/api/gaps")).json()).find((g) => g.slug === "etl-ssis").counts.total).toBe(2);
+  });
+
   it("saves analysis.json on analyze and plan.json (with the facts used) on build", async () => {
     let call = 0;
     const anthropic = fakeAnthropic(() =>

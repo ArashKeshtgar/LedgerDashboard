@@ -7,7 +7,7 @@ import { existsSync } from "fs";
 import path from "path";
 import { runProcess } from "./process.js";
 
-export const TRACKED_PATHS = ["facts", "gap_tags.yml", "templates", "health_dismissed.yml"];
+export const TRACKED_PATHS = ["facts", "gap_tags.yml", "gap_aliases.yml", "templates", "health_dismissed.yml"];
 
 export function createEngineGit(engineDir, { gitCommand = "git" } = {}) {
   const enabled = () => existsSync(path.join(engineDir, ".git"));

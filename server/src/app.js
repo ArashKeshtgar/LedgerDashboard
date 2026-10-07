@@ -22,7 +22,7 @@ import { CONTACT_FIELDS, ContactValidationError, resolveContact } from "./contac
 import { isStoreValidationError } from "./stores/sqlStore.js";
 import { registerTruthRoutes } from "./truthRoutes.js";
 import { registerEvalRoutes } from "./evalRoutes.js";
-import { bankFingerprint, gapStatus, readFacts } from "./truthBank.js";
+import { bankFingerprint, gapStatus, readFacts, readGapAliases, resolveGapAliases } from "./truthBank.js";
 
 const VALIDATE_TIMEOUT_MS = 30_000;
 // LibreOffice's docx -> pdf conversion is the slow part of a build.
@@ -40,6 +40,7 @@ export function createApp(cfg, deps = {}) {
   const ENGINE_DIR = path.join(JOBSEARCH_DIR, "engine");
   const APPLICATIONS_DIR = path.join(ENGINE_DIR, "applications");
   const GAP_TAGS_PATH = path.join(ENGINE_DIR, "gap_tags.yml");
+  const GAP_ALIASES_PATH = path.join(ENGINE_DIR, "gap_aliases.yml");
   const FACTS_DIR = path.join(ENGINE_DIR, "facts");
   const COMPANIES_PATH = path.join(ENGINE_DIR, "companies.yml");
 
@@ -366,6 +367,13 @@ export function createApp(cfg, deps = {}) {
       // source, and a self-found one must be marked verified.
       if (CONTACT_FIELDS.some((f) => f in updates)) {
         Object.assign(updates, resolveContact(current, updates));
+      }
+      // A merged slug typed by hand still counts as the gap it merged into.
+      // Only the alias is swapped — anything else is left for the store to
+      // validate, so a sentence sent as tags is still refused.
+      if (typeof updates.gap_tags === "string" && updates.gap_tags) {
+        const tags = updates.gap_tags.split(",").map((t) => t.trim());
+        updates.gap_tags = resolveGapAliases(tags, readGapAliases(GAP_ALIASES_PATH)).join(",");
       }
 
       await store.updateApplication(folder, updates);
@@ -727,7 +735,10 @@ export function createApp(cfg, deps = {}) {
   // prompt and the nightly search are told never to use a [CLOSED] slug, and
   // both have done it anyway (TCS, 2026-10-03), so the dictionary is
   // enforced here rather than trusted to the prompt.
-  function withoutClosedGaps(tags) {
+  // Merged slugs (gap_aliases.yml) are mapped to the gap they now count as
+  // first, so a closed target drops them too.
+  function withoutClosedGaps(rawTags) {
+    const tags = resolveGapAliases(rawTags, readGapAliases(GAP_ALIASES_PATH));
     const dict = loadGapTagsDict();
     const isClosed = (t) => dict[t] != null && gapStatus(String(dict[t])) === "closed";
     return { kept: tags.filter((t) => !isClosed(t)), dropped: tags.filter(isClosed) };

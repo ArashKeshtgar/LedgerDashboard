@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { createGap, fetchGaps, fetchHealth, fetchTruthBank, updateGap } from "../api.js";
+import { createGap, fetchGaps, fetchHealth, fetchTruthBank, mergeGap, updateGap } from "../api.js";
 import HistoryPanel from "../components/HistoryPanel.jsx";
 import { FactLink, GapStatusBadge, InlineIssues } from "../components/TruthBits.jsx";
 
@@ -147,6 +147,24 @@ export default function GapsPage() {
     await load();
   }
 
+  // Two slugs for one gap split its count: merging retags every posting
+  // with the target and keeps an alias for analyses that still use the old one.
+  async function merge(slug) {
+    const into = window.prompt(`Merge “${slug}” into which gap? (type its slug)`)?.trim();
+    if (!into) return;
+    if (!gaps.some((g) => g.slug === into && g.defined)) {
+      window.alert(`“${into}” isn't a defined gap.`);
+      return;
+    }
+    try {
+      const r = await mergeGap(slug, into);
+      setSaved(`Merged ${slug} into ${into} — ${r.updated} posting(s) retagged.`);
+      await load();
+    } catch (e) {
+      window.alert(e.message);
+    }
+  }
+
   return (
     <div>
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -278,6 +296,7 @@ export default function GapsPage() {
                         Define
                       </button>
                     )}
+                    <button type="button" className="btn btn-sm btn-outline-secondary py-0 ms-1" title="Merge into another gap" onClick={() => merge(g.slug)}>⤵</button>
                   </td>
                 </tr>
               ))}

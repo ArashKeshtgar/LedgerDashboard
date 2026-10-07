@@ -240,6 +240,7 @@ export const commitOutsideEdits = (message) => request("POST", "/api/truth-bank/
 
 export const fetchGaps = () => request("GET", "/api/gaps");
 export const createGap = (slug, label) => request("POST", "/api/gaps", { slug, label });
+export const mergeGap = (slug, into) => request("POST", `/api/gaps/${encodeURIComponent(slug)}/merge`, { into });
 export const updateGap = (slug, label, note) =>
   request("PUT", `/api/gaps/${encodeURIComponent(slug)}`, { label, note });
 

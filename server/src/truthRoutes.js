@@ -10,7 +10,7 @@ import { isSafeFolderName } from "./paths.js";
 import { createEngineGit } from "./engineGit.js";
 import { computeHealth } from "./health.js";
 import {
-  TruthBankError, bankFingerprint, deleteFact, factRefs, gapStatus, readFacts, readGaps,
+  TruthBankError, bankFingerprint, deleteFact, factRefs, gapStatus, mergeGap, readFacts, readGaps,
   saveFact, saveGap, sectionOf,
 } from "./truthBank.js";
 
@@ -20,6 +20,7 @@ const RESUME_RE = /Resume\.docx$/i;
 export function registerTruthRoutes(app, { cfg, store, withPipeline, sendError, engineDir, git: gitOverride }) {
   const FACTS_DIR = path.join(engineDir, "facts");
   const GAP_TAGS_PATH = path.join(engineDir, "gap_tags.yml");
+  const GAP_ALIASES_PATH = path.join(engineDir, "gap_aliases.yml");
   const APPLICATIONS_DIR = path.join(engineDir, "applications");
   const TEMPLATES_DIR = path.join(engineDir, "templates");
   const DISMISSED_PATH = path.join(engineDir, "health_dismissed.yml");
@@ -259,6 +260,35 @@ export function registerTruthRoutes(app, { cfg, store, withPipeline, sendError, 
       const note = (req.body?.note || "").trim();
       const commit = await git.commit(["gap_tags.yml"], `Edit gap ${saved.slug}${note ? `: ${note}` : ""}`);
       res.json({ ...saved, commit });
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+
+  // POST /api/gaps/:slug/merge { into } - two slugs for one gap (cs-degree,
+  // bachelor-degree-cs, degree-requirement) split its count three ways.
+  // Every application tagged with the old slug gets `into` instead (row and
+  // its saved analysis), the old slug leaves the dictionary, and an alias
+  // maps any later analysis that still coins it.
+  app.post("/api/gaps/:slug/merge", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const into = req.body?.into;
+      mergeGap(GAP_TAGS_PATH, GAP_ALIASES_PATH, { slug, into });
+      const swap = (tags) => [...new Set(tags.map((t) => (t === slug ? into : t)))];
+      let updated = 0;
+      for (const a of await applicationsInfo()) {
+        if (!a.gapTags.includes(slug)) continue;
+        await store.updateApplication(a.folder, { gap_tags: swap(a.gapTags).join(",") });
+        updated++;
+        const analysisPath = path.join(APPLICATIONS_DIR, a.folder, "analysis.json");
+        const analysis = readJson(analysisPath);
+        if (Array.isArray(analysis?.gap_tags) && analysis.gap_tags.includes(slug)) {
+          writeFileSync(analysisPath, JSON.stringify({ ...analysis, gap_tags: swap(analysis.gap_tags) }, null, 2), "utf-8");
+        }
+      }
+      const commit = await git.commit(["gap_tags.yml", "gap_aliases.yml"], `Merge gap ${slug} into ${into}`);
+      res.json({ slug, into, updated, commit });
     } catch (err) {
       fail(res, err);
     }

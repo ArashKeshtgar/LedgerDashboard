@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { createHash } from "crypto";
 import path from "path";
-import { load as loadYaml } from "js-yaml";
+import { dump as dumpYaml, load as loadYaml } from "js-yaml";
 
 export const STRENGTHS = ["strong", "medium", "soft"];
 export const FACT_ID_RE =
@@ -290,4 +290,53 @@ export function saveGap(gapTagsPath, { slug, label, create }) {
     if (others.some((k) => parsed[k] !== before[k])) throw new Error("Saving would have changed other gaps — nothing was written");
   }, src);
   return { slug, label: text };
+}
+
+// --- gap aliases (merged gaps) -------------------------------------------------
+// gap_aliases.yml maps a merged slug to the gap it now counts as. The
+// dictionary keeps only the surviving slug; any analysis that still coins
+// the old one is mapped on save.
+
+export function readGapAliases(aliasesPath) {
+  if (!existsSync(aliasesPath)) return {};
+  return loadYaml(readFileSync(aliasesPath, "utf-8")) || {};
+}
+
+export function resolveGapAliases(tags, aliases) {
+  return [...new Set(tags.map((t) => aliases[t] || t))];
+}
+
+// Removes `slug` from the dictionary and records slug -> into. Aliases that
+// pointed at `slug` are pointed at `into`, so chains never form.
+export function mergeGap(gapTagsPath, aliasesPath, { slug, into }) {
+  if (!GAP_SLUG_RE.test(slug || "") || !GAP_SLUG_RE.test(into || "")) {
+    throw new TruthBankError("slug and into must be lowercase kebab-case");
+  }
+  if (slug === into) throw new TruthBankError("A gap can't be merged into itself");
+  const src = existsSync(gapTagsPath) ? readFileSync(gapTagsPath, "utf-8") : "";
+  const before = loadYaml(src) || {};
+  if (!Object.prototype.hasOwnProperty.call(before, into)) throw new TruthBankError(`Unknown gap: ${into}`, 404);
+
+  if (Object.prototype.hasOwnProperty.call(before, slug)) {
+    const lines = toLines(src);
+    const i = lines.findIndex((l) => l.startsWith(`${slug}:`));
+    if (i < 0 || !/^[a-z0-9-]+: ".*"$/.test(lines[i])) {
+      throw new TruthBankError(`${slug} isn't a one-line entry in gap_tags.yml — edit it by hand`, 409);
+    }
+    lines.splice(i, 1);
+    writeChecked(gapTagsPath, lines.join("\n"), (parsed) => {
+      if (Object.prototype.hasOwnProperty.call(parsed, slug)) throw new Error(`${slug} is still in gap_tags.yml — nothing was written`);
+      const others = Object.keys(before).filter((k) => k !== slug);
+      if (others.some((k) => parsed[k] !== before[k])) throw new Error("Merging would have changed other gaps — nothing was written");
+    }, src);
+  }
+
+  const aliases = readGapAliases(aliasesPath);
+  for (const [from, to] of Object.entries(aliases)) if (to === slug) aliases[from] = into;
+  aliases[slug] = into;
+  const header =
+    "# Merged gaps: old slug -> the gap it now counts as. Written by the Gaps\n" +
+    "# page's Merge; analyses that still use an old slug are mapped on save.\n";
+  writeFileSync(aliasesPath, header + dumpYaml(aliases, { sortKeys: true }), "utf-8");
+  return { slug, into };
 }

@@ -489,9 +489,11 @@ describe("recruiter next step", () => {
       { ...base, id: "f", name: "F", connect_accepted: "2026-09-20", followup_sent: "2026-09-25" },
       { ...base, id: "w", name: "W", connect_sent: "2026-10-07" },
     ];
-    const plan = planToday(rows, today, 2);
+    const plan = planToday(rows, today, 9);
     expect(plan.today).toEqual(["f", "c0", "c1", "c2"]);
     expect(plan.queuedConnects).toBe(4);
+    // the weekly cap wins when it is tighter than what is left today
+    expect(planToday(rows, today, 0, 59).today).toEqual(["f", "c0"]);
     expect(plan.rows.find((r) => r.id === "f").next.overdueDays).toBe(6);
   });
 });

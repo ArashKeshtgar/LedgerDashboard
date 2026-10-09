@@ -190,8 +190,12 @@ function TodayCard({ rows, todayIds, queuedConnects, busyId, onDone }) {
                   )}
                 </div>
               </div>
-              {r.next.step === "connect" && <CopyButton text={r.connect_note} label="Connect" />}
-              {r.next.step !== "connect" && r.followup_note && <CopyButton text={r.followup_note} label="Message" />}
+              {r.next.step === "connect" && (
+                <span className="small text-muted">Connect → «Send without a note»</span>
+              )}
+              {r.next.step !== "connect" && (r.followup_note || r.connect_note) && (
+                <CopyButton text={r.followup_note || r.connect_note} label="Message" />
+              )}
               {r.next.field && (
                 <button
                   type="button"

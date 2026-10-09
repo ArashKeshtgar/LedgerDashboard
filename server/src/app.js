@@ -18,7 +18,7 @@ import { passwordMatches, createLoginLimiter, originGuard } from "./security.js"
 import { runProcess, findPython } from "./process.js";
 import { slugify, todayISO, weekStartISO, ISO_DATE_RE } from "./text.js";
 import { RECRUITER_DATE_FIELDS } from "./stores/shape.js";
-import { planToday, CONNECT_DAILY_CAP } from "./recruiterNext.js";
+import { planToday, CONNECT_DAILY_CAP, CONNECT_WEEKLY_CAP } from "./recruiterNext.js";
 import { CONTACT_FIELDS, ContactValidationError, resolveContact } from "./contact.js";
 import { isStoreValidationError } from "./stores/sqlStore.js";
 import { registerTruthRoutes } from "./truthRoutes.js";
@@ -1338,7 +1338,7 @@ export function createApp(cfg, deps = {}) {
       const listed = withRecruiterMeta(await store.listRecruiters());
       const { today, sentToday, sentThisWeek, weekStart } = sendCounts(listed);
       // each row gets `next` ({ step, due, tag, ... }); `today` = ids to act on now
-      const plan = planToday(listed, today, sentToday);
+      const plan = planToday(listed, today, sentToday, sentThisWeek);
       const rows = plan.rows;
 
       const funnel = {
@@ -1355,7 +1355,7 @@ export function createApp(cfg, deps = {}) {
         today: plan.today,
         queuedConnects: plan.queuedConnects,
         daily: { sent: sentToday, cap: CONNECT_DAILY_CAP },
-        weekly: { sent: sentThisWeek, cap: 25, hardCap: 100, weekStart },
+        weekly: { sent: sentThisWeek, cap: CONNECT_WEEKLY_CAP, hardCap: 100, weekStart },
       });
     } catch (err) {
       sendError(res, err);
@@ -1412,8 +1412,8 @@ export function createApp(cfg, deps = {}) {
       let warning = null;
       if (field === "connect_sent" && value) {
         const { sentToday, sentThisWeek } = sendCounts(await store.listRecruiters());
-        if (sentToday >= 5) warning = `Already ${sentToday} sent today — daily target is 5.`;
-        else if (sentThisWeek >= 25) warning = `Already ${sentThisWeek} sent this week — weekly target is 25.`;
+        if (sentToday >= CONNECT_DAILY_CAP) warning = `Already ${sentToday} sent today — daily target is ${CONNECT_DAILY_CAP}.`;
+        else if (sentThisWeek >= CONNECT_WEEKLY_CAP) warning = `Already ${sentThisWeek} sent this week — weekly target is ${CONNECT_WEEKLY_CAP}.`;
       }
 
       const updated = await store.setRecruiterDate(req.params.id, field, value ? todayISO() : null);

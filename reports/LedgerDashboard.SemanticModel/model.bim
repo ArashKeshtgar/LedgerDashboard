@@ -1,0 +1,626 @@
+{
+  "compatibilityLevel": 1550,
+  "model": {
+    "culture": "en-US",
+    "dataAccessOptions": {
+      "legacyRedirects": true,
+      "returnErrorValuesAsNull": true
+    },
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "sourceQueryCulture": "en-US",
+    "tables": [
+      {
+        "name": "ApplicationFacts",
+        "columns": [
+          {
+            "name": "ApplicationId",
+            "dataType": "int64",
+            "sourceColumn": "ApplicationId",
+            "summarizeBy": "none",
+            "isHidden": true
+          },
+          {
+            "name": "Folder",
+            "dataType": "string",
+            "sourceColumn": "Folder",
+            "summarizeBy": "none",
+            "isHidden": true
+          },
+          {
+            "name": "Company",
+            "dataType": "string",
+            "sourceColumn": "Company",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Role",
+            "dataType": "string",
+            "sourceColumn": "Role",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Source",
+            "dataType": "string",
+            "sourceColumn": "Source",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "PosterType",
+            "dataType": "string",
+            "sourceColumn": "PosterType",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "AppliedVia",
+            "dataType": "string",
+            "sourceColumn": "AppliedVia",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Variant",
+            "dataType": "string",
+            "sourceColumn": "Variant",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "MatchScore",
+            "dataType": "int64",
+            "sourceColumn": "MatchScore",
+            "summarizeBy": "average"
+          },
+          {
+            "name": "ScoreBucket",
+            "dataType": "string",
+            "sourceColumn": "ScoreBucket",
+            "summarizeBy": "none",
+            "sortByColumn": "ScoreBucketOrder"
+          },
+          {
+            "name": "ScoreBucketOrder",
+            "dataType": "int64",
+            "sourceColumn": "ScoreBucketOrder",
+            "summarizeBy": "none",
+            "isHidden": true
+          },
+          {
+            "name": "CurrentStage",
+            "dataType": "string",
+            "sourceColumn": "CurrentStage",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Outcome",
+            "dataType": "string",
+            "sourceColumn": "Outcome",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "IsSent",
+            "dataType": "boolean",
+            "sourceColumn": "IsSent",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "IsRejected",
+            "dataType": "boolean",
+            "sourceColumn": "IsRejected",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "GotInterview",
+            "dataType": "boolean",
+            "sourceColumn": "GotInterview",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "CreatedDate",
+            "dataType": "dateTime",
+            "sourceColumn": "CreatedDate",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "SentDate",
+            "dataType": "dateTime",
+            "sourceColumn": "SentDate",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "SentWeek",
+            "dataType": "dateTime",
+            "sourceColumn": "SentWeek",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "RejectedDate",
+            "dataType": "dateTime",
+            "sourceColumn": "RejectedDate",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "DaysToReject",
+            "dataType": "int64",
+            "sourceColumn": "DaysToReject",
+            "summarizeBy": "average"
+          },
+          {
+            "name": "FollowupCount",
+            "dataType": "int64",
+            "sourceColumn": "FollowupCount",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "HasFollowup",
+            "dataType": "boolean",
+            "sourceColumn": "HasFollowup",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "HasContactEmail",
+            "dataType": "boolean",
+            "sourceColumn": "HasContactEmail",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "ContactSource",
+            "dataType": "string",
+            "sourceColumn": "ContactSource",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "NeedsFollowup",
+            "dataType": "boolean",
+            "sourceColumn": "NeedsFollowup",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "DaysSinceAction",
+            "dataType": "int64",
+            "sourceColumn": "DaysSinceAction",
+            "summarizeBy": "max"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "ApplicationFacts",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(SqlServer, SqlDatabase),",
+                "    Data = Source{[Schema=\"rpt\",Item=\"ApplicationFacts\"]}[Data]",
+                "in",
+                "    Data"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "Applications Sent",
+            "expression": "CALCULATE ( COUNTROWS ( ApplicationFacts ), ApplicationFacts[IsSent] = TRUE () )",
+            "formatString": "0",
+            "displayFolder": "Pipeline"
+          },
+          {
+            "name": "Rejected",
+            "expression": "CALCULATE ( COUNTROWS ( ApplicationFacts ), ApplicationFacts[IsRejected] = TRUE () )",
+            "formatString": "0",
+            "displayFolder": "Pipeline"
+          },
+          {
+            "name": "Rejection Rate",
+            "expression": "DIVIDE ( [Rejected], [Applications Sent] )",
+            "formatString": "0.0%",
+            "displayFolder": "Pipeline"
+          },
+          {
+            "name": "Awaiting Reply",
+            "expression": "CALCULATE ( COUNTROWS ( ApplicationFacts ), ApplicationFacts[Outcome] = \"Awaiting reply\" )",
+            "formatString": "0",
+            "displayFolder": "Pipeline"
+          },
+          {
+            "name": "Interviews",
+            "expression": "CALCULATE ( COUNTROWS ( ApplicationFacts ), ApplicationFacts[GotInterview] = TRUE () )",
+            "formatString": "0",
+            "displayFolder": "Pipeline"
+          },
+          {
+            "name": "Interview Rate",
+            "expression": "DIVIDE ( [Interviews], [Applications Sent] )",
+            "formatString": "0.0%",
+            "displayFolder": "Pipeline"
+          },
+          {
+            "name": "Avg Match Score",
+            "expression": "AVERAGE ( ApplicationFacts[MatchScore] )",
+            "formatString": "0.0",
+            "displayFolder": "Pipeline"
+          },
+          {
+            "name": "Median Days to Reject",
+            "expression": "MEDIAN ( ApplicationFacts[DaysToReject] )",
+            "formatString": "0",
+            "displayFolder": "Pipeline",
+            "description": "Days from sending to the rejection, for rejected applications."
+          },
+          {
+            "name": "Follow-ups Due",
+            "expression": "CALCULATE ( COUNTROWS ( ApplicationFacts ), ApplicationFacts[NeedsFollowup] = TRUE () )",
+            "formatString": "0",
+            "displayFolder": "Follow-up",
+            "description": "Waiting on the employer for more than 7 days since the last action."
+          },
+          {
+            "name": "Contact Coverage",
+            "expression": "DIVIDE ( CALCULATE ( COUNTROWS ( ApplicationFacts ), ApplicationFacts[IsSent] = TRUE (), ApplicationFacts[HasContactEmail] = TRUE () ), [Applications Sent] )",
+            "formatString": "0%",
+            "displayFolder": "Follow-up",
+            "description": "Share of sent applications with a published or verified hiring-contact email."
+          }
+        ],
+        "description": "One row per application (rpt.ApplicationFacts)."
+      },
+      {
+        "name": "GapTags",
+        "columns": [
+          {
+            "name": "ApplicationId",
+            "dataType": "int64",
+            "sourceColumn": "ApplicationId",
+            "summarizeBy": "none",
+            "isHidden": true
+          },
+          {
+            "name": "Slug",
+            "dataType": "string",
+            "sourceColumn": "Slug",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Position",
+            "dataType": "int64",
+            "sourceColumn": "Position",
+            "summarizeBy": "none",
+            "isHidden": true
+          }
+        ],
+        "partitions": [
+          {
+            "name": "GapTags",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(SqlServer, SqlDatabase),",
+                "    Data = Source{[Schema=\"rpt\",Item=\"GapTags\"]}[Data]",
+                "in",
+                "    Data"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "Gap Mentions",
+            "expression": "COUNTROWS ( GapTags )",
+            "formatString": "0",
+            "displayFolder": "Gaps"
+          },
+          {
+            "name": "Gap Rejections",
+            "expression": "CALCULATE ( COUNTROWS ( GapTags ), ApplicationFacts[IsRejected] = TRUE () )",
+            "formatString": "0",
+            "displayFolder": "Gaps",
+            "description": "Postings listing this gap that ended in a rejection."
+          }
+        ]
+      },
+      {
+        "name": "PipelineEvents",
+        "columns": [
+          {
+            "name": "EventId",
+            "dataType": "int64",
+            "sourceColumn": "EventId",
+            "summarizeBy": "none",
+            "isHidden": true
+          },
+          {
+            "name": "ApplicationId",
+            "dataType": "int64",
+            "sourceColumn": "ApplicationId",
+            "summarizeBy": "none",
+            "isHidden": true
+          },
+          {
+            "name": "StageKey",
+            "dataType": "string",
+            "sourceColumn": "StageKey",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "StageLabel",
+            "dataType": "string",
+            "sourceColumn": "StageLabel",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "StageKind",
+            "dataType": "string",
+            "sourceColumn": "StageKind",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "EventDate",
+            "dataType": "dateTime",
+            "sourceColumn": "EventDate",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "EventWeek",
+            "dataType": "dateTime",
+            "sourceColumn": "EventWeek",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "Note",
+            "dataType": "string",
+            "sourceColumn": "Note",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "PipelineEvents",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(SqlServer, SqlDatabase),",
+                "    Data = Source{[Schema=\"rpt\",Item=\"PipelineEvents\"]}[Data]",
+                "in",
+                "    Data"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "Events",
+            "expression": "COUNTROWS ( PipelineEvents )",
+            "formatString": "0",
+            "displayFolder": "Activity"
+          }
+        ]
+      },
+      {
+        "name": "FollowupsDue",
+        "columns": [
+          {
+            "name": "Folder",
+            "dataType": "string",
+            "sourceColumn": "Folder",
+            "summarizeBy": "none",
+            "isHidden": true
+          },
+          {
+            "name": "Company",
+            "dataType": "string",
+            "sourceColumn": "Company",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Role",
+            "dataType": "string",
+            "sourceColumn": "Role",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "CurrentStage",
+            "dataType": "string",
+            "sourceColumn": "CurrentStage",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "HasContactEmail",
+            "dataType": "boolean",
+            "sourceColumn": "HasContactEmail",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "LastActionDate",
+            "dataType": "dateTime",
+            "sourceColumn": "LastActionDate",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "DaysSinceAction",
+            "dataType": "int64",
+            "sourceColumn": "DaysSinceAction",
+            "summarizeBy": "max"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "FollowupsDue",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(SqlServer, SqlDatabase),",
+                "    Data = Source{[Schema=\"dbo\",Item=\"vFollowupsDue\"]}[Data]",
+                "in",
+                "    Data"
+              ]
+            }
+          }
+        ],
+        "description": "Applications past the 7-day follow-up threshold (dbo.vFollowupsDue)."
+      },
+      {
+        "name": "Recruiters",
+        "columns": [
+          {
+            "name": "RecruiterId",
+            "dataType": "int64",
+            "sourceColumn": "RecruiterId",
+            "summarizeBy": "none",
+            "isHidden": true
+          },
+          {
+            "name": "Company",
+            "dataType": "string",
+            "sourceColumn": "Company",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Title",
+            "dataType": "string",
+            "sourceColumn": "Title",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Source",
+            "dataType": "string",
+            "sourceColumn": "Source",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "DateAdded",
+            "dataType": "dateTime",
+            "sourceColumn": "DateAdded",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "ConnectSentOn",
+            "dataType": "dateTime",
+            "sourceColumn": "ConnectSentOn",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "ConnectAcceptedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "ConnectAcceptedOn",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "FollowupSentOn",
+            "dataType": "dateTime",
+            "sourceColumn": "FollowupSentOn",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "RepliedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "RepliedOn",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "Stage",
+            "dataType": "string",
+            "sourceColumn": "Stage",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "Recruiters",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(SqlServer, SqlDatabase),",
+                "    Data = Source{[Schema=\"rpt\",Item=\"Recruiters\"]}[Data]",
+                "in",
+                "    Data"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "Recruiters Added",
+            "expression": "COUNTROWS ( Recruiters )",
+            "formatString": "0",
+            "displayFolder": "Outreach"
+          },
+          {
+            "name": "Connect Requests Sent",
+            "expression": "COUNTROWS ( FILTER ( Recruiters, NOT ISBLANK ( Recruiters[ConnectSentOn] ) ) )",
+            "formatString": "0",
+            "displayFolder": "Outreach"
+          },
+          {
+            "name": "Replies",
+            "expression": "COUNTROWS ( FILTER ( Recruiters, NOT ISBLANK ( Recruiters[RepliedOn] ) ) )",
+            "formatString": "0",
+            "displayFolder": "Outreach"
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "GapTags_ApplicationFacts",
+        "fromTable": "GapTags",
+        "fromColumn": "ApplicationId",
+        "toTable": "ApplicationFacts",
+        "toColumn": "ApplicationId"
+      },
+      {
+        "name": "PipelineEvents_ApplicationFacts",
+        "fromTable": "PipelineEvents",
+        "fromColumn": "ApplicationId",
+        "toTable": "ApplicationFacts",
+        "toColumn": "ApplicationId"
+      },
+      {
+        "name": "FollowupsDue_ApplicationFacts",
+        "fromTable": "FollowupsDue",
+        "fromColumn": "Folder",
+        "toTable": "ApplicationFacts",
+        "toColumn": "Folder"
+      }
+    ],
+    "expressions": [
+      {
+        "name": "SqlServer",
+        "kind": "m",
+        "expression": "\"localhost\" meta [IsParameterQuery=true, Type=\"Text\", IsParameterQueryRequired=true]"
+      },
+      {
+        "name": "SqlDatabase",
+        "kind": "m",
+        "expression": "\"LedgerDashboard\" meta [IsParameterQuery=true, Type=\"Text\", IsParameterQueryRequired=true]"
+      }
+    ],
+    "annotations": [
+      {
+        "name": "PBI_QueryOrder",
+        "value": "[\"SqlServer\", \"SqlDatabase\", \"ApplicationFacts\", \"GapTags\", \"PipelineEvents\", \"FollowupsDue\", \"Recruiters\"]"
+      },
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "0"
+      }
+    ]
+  }
+}

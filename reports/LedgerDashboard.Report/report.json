@@ -1,0 +1,178 @@
+{
+  "config": "{\"version\": \"5.43\", \"themeCollection\": {}, \"activeSectionIndex\": 0, \"settings\": {}, \"objects\": {}}",
+  "layoutOptimization": 0,
+  "resourcePackages": [],
+  "sections": [
+    {
+      "name": "ReportSectionOverview",
+      "displayName": "Overview",
+      "displayOption": 1,
+      "width": 1280,
+      "height": 720,
+      "ordinal": 0,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 16,
+          "y": 16,
+          "z": 0,
+          "width": 240,
+          "height": 110,
+          "config": "{\"name\": \"0b22a2d6089d4948ab4d\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 16, \"y\": 16, \"z\": 0, \"width\": 240, \"height\": 110}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"ApplicationFacts.Applications Sent\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Applications Sent\"}, \"Name\": \"ApplicationFacts.Applications Sent\", \"NativeReferenceName\": \"Applications Sent\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Applications sent'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 268,
+          "y": 16,
+          "z": 0,
+          "width": 240,
+          "height": 110,
+          "config": "{\"name\": \"863d9ac9a3f545288ed9\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 268, \"y\": 16, \"z\": 0, \"width\": 240, \"height\": 110}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"ApplicationFacts.Rejection Rate\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Rejection Rate\"}, \"Name\": \"ApplicationFacts.Rejection Rate\", \"NativeReferenceName\": \"Rejection Rate\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Rejection rate'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 520,
+          "y": 16,
+          "z": 0,
+          "width": 240,
+          "height": 110,
+          "config": "{\"name\": \"feb6c023dead40bab384\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 520, \"y\": 16, \"z\": 0, \"width\": 240, \"height\": 110}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"ApplicationFacts.Awaiting Reply\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Awaiting Reply\"}, \"Name\": \"ApplicationFacts.Awaiting Reply\", \"NativeReferenceName\": \"Awaiting Reply\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Awaiting reply'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 772,
+          "y": 16,
+          "z": 0,
+          "width": 240,
+          "height": 110,
+          "config": "{\"name\": \"dd525ea3254246459e3c\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 772, \"y\": 16, \"z\": 0, \"width\": 240, \"height\": 110}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"ApplicationFacts.Follow-ups Due\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Follow-ups Due\"}, \"Name\": \"ApplicationFacts.Follow-ups Due\", \"NativeReferenceName\": \"Follow-ups Due\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Follow-ups due'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1024,
+          "y": 16,
+          "z": 0,
+          "width": 240,
+          "height": 110,
+          "config": "{\"name\": \"e07ea9846adb4b17aec2\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1024, \"y\": 16, \"z\": 0, \"width\": 240, \"height\": 110}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"ApplicationFacts.Contact Coverage\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Contact Coverage\"}, \"Name\": \"ApplicationFacts.Contact Coverage\", \"NativeReferenceName\": \"Contact Coverage\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'With a hiring contact'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 16,
+          "y": 142,
+          "z": 0,
+          "width": 616,
+          "height": 280,
+          "config": "{\"name\": \"764030a060de4f529fdd\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 16, \"y\": 142, \"z\": 0, \"width\": 616, \"height\": 280}}], \"singleVisual\": {\"visualType\": \"clusteredColumnChart\", \"projections\": {\"Category\": [{\"queryRef\": \"ApplicationFacts.SentWeek\"}], \"Y\": [{\"queryRef\": \"ApplicationFacts.Applications Sent\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"SentWeek\"}, \"Name\": \"ApplicationFacts.SentWeek\", \"NativeReferenceName\": \"SentWeek\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Applications Sent\"}, \"Name\": \"ApplicationFacts.Applications Sent\", \"NativeReferenceName\": \"Applications Sent\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Applications sent per week'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 648,
+          "y": 142,
+          "z": 0,
+          "width": 616,
+          "height": 280,
+          "config": "{\"name\": \"d1be989afe4641249707\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 648, \"y\": 142, \"z\": 0, \"width\": 616, \"height\": 280}}], \"singleVisual\": {\"visualType\": \"clusteredColumnChart\", \"projections\": {\"Category\": [{\"queryRef\": \"ApplicationFacts.ScoreBucket\"}], \"Y\": [{\"queryRef\": \"ApplicationFacts.Rejection Rate\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"ScoreBucket\"}, \"Name\": \"ApplicationFacts.ScoreBucket\", \"NativeReferenceName\": \"ScoreBucket\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Rejection Rate\"}, \"Name\": \"ApplicationFacts.Rejection Rate\", \"NativeReferenceName\": \"Rejection Rate\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Rejection rate by match score'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 16,
+          "y": 438,
+          "z": 0,
+          "width": 616,
+          "height": 266,
+          "config": "{\"name\": \"8393c179354847d59b71\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 16, \"y\": 438, \"z\": 0, \"width\": 616, \"height\": 266}}], \"singleVisual\": {\"visualType\": \"clusteredBarChart\", \"projections\": {\"Category\": [{\"queryRef\": \"ApplicationFacts.Outcome\"}], \"Y\": [{\"queryRef\": \"ApplicationFacts.Applications Sent\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Outcome\"}, \"Name\": \"ApplicationFacts.Outcome\", \"NativeReferenceName\": \"Outcome\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Applications Sent\"}, \"Name\": \"ApplicationFacts.Applications Sent\", \"NativeReferenceName\": \"Applications Sent\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Applications Sent\"}}}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Where applications stand'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 648,
+          "y": 438,
+          "z": 0,
+          "width": 616,
+          "height": 266,
+          "config": "{\"name\": \"1689650568e3409d8b16\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 648, \"y\": 438, \"z\": 0, \"width\": 616, \"height\": 266}}], \"singleVisual\": {\"visualType\": \"clusteredBarChart\", \"projections\": {\"Category\": [{\"queryRef\": \"ApplicationFacts.AppliedVia\"}], \"Y\": [{\"queryRef\": \"ApplicationFacts.Applications Sent\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"AppliedVia\"}, \"Name\": \"ApplicationFacts.AppliedVia\", \"NativeReferenceName\": \"AppliedVia\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Applications Sent\"}, \"Name\": \"ApplicationFacts.Applications Sent\", \"NativeReferenceName\": \"Applications Sent\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Applications Sent\"}}}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Applications by channel'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "ReportSectionGaps",
+      "displayName": "Skill gaps",
+      "displayOption": 1,
+      "width": 1280,
+      "height": 720,
+      "ordinal": 1,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 16,
+          "y": 16,
+          "z": 0,
+          "width": 740,
+          "height": 688,
+          "config": "{\"name\": \"e6b9e42a672b43968ebd\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 16, \"y\": 16, \"z\": 0, \"width\": 740, \"height\": 688}}], \"singleVisual\": {\"visualType\": \"clusteredBarChart\", \"projections\": {\"Category\": [{\"queryRef\": \"GapTags.Slug\"}], \"Y\": [{\"queryRef\": \"GapTags.Gap Mentions\"}, {\"queryRef\": \"GapTags.Gap Rejections\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"GapTags\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Slug\"}, \"Name\": \"GapTags.Slug\", \"NativeReferenceName\": \"Slug\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Gap Mentions\"}, \"Name\": \"GapTags.Gap Mentions\", \"NativeReferenceName\": \"Gap Mentions\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Gap Rejections\"}, \"Name\": \"GapTags.Gap Rejections\", \"NativeReferenceName\": \"Gap Rejections\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Gap Rejections\"}}}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Gaps by postings and rejections'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 772,
+          "y": 16,
+          "z": 0,
+          "width": 492,
+          "height": 688,
+          "config": "{\"name\": \"9c6d354e862a435b978a\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 772, \"y\": 16, \"z\": 0, \"width\": 492, \"height\": 688}}], \"singleVisual\": {\"visualType\": \"tableEx\", \"projections\": {\"Values\": [{\"queryRef\": \"GapTags.Slug\"}, {\"queryRef\": \"GapTags.Gap Mentions\"}, {\"queryRef\": \"GapTags.Gap Rejections\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"GapTags\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Slug\"}, \"Name\": \"GapTags.Slug\", \"NativeReferenceName\": \"Slug\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Gap Mentions\"}, \"Name\": \"GapTags.Gap Mentions\", \"NativeReferenceName\": \"Gap Mentions\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Gap Rejections\"}, \"Name\": \"GapTags.Gap Rejections\", \"NativeReferenceName\": \"Gap Rejections\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Gap Rejections\"}}}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Gap tags'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "ReportSectionFollowup",
+      "displayName": "Follow-up",
+      "displayOption": 1,
+      "width": 1280,
+      "height": 720,
+      "ordinal": 2,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 16,
+          "y": 16,
+          "z": 0,
+          "width": 240,
+          "height": 110,
+          "config": "{\"name\": \"379fb5ca6c9d40559601\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 16, \"y\": 16, \"z\": 0, \"width\": 240, \"height\": 110}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"ApplicationFacts.Follow-ups Due\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Follow-ups Due\"}, \"Name\": \"ApplicationFacts.Follow-ups Due\", \"NativeReferenceName\": \"Follow-ups Due\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Follow-ups due'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 268,
+          "y": 16,
+          "z": 0,
+          "width": 240,
+          "height": 110,
+          "config": "{\"name\": \"d065a18aa7f543ccb0d0\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 268, \"y\": 16, \"z\": 0, \"width\": 240, \"height\": 110}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"ApplicationFacts.Contact Coverage\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Contact Coverage\"}, \"Name\": \"ApplicationFacts.Contact Coverage\", \"NativeReferenceName\": \"Contact Coverage\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'With a hiring contact'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 520,
+          "y": 16,
+          "z": 0,
+          "width": 240,
+          "height": 110,
+          "config": "{\"name\": \"2adc39e9cc894025889f\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 520, \"y\": 16, \"z\": 0, \"width\": 240, \"height\": 110}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"ApplicationFacts.Median Days to Reject\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"ApplicationFacts\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Median Days to Reject\"}, \"Name\": \"ApplicationFacts.Median Days to Reject\", \"NativeReferenceName\": \"Median Days to Reject\"}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Median days to a rejection'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 16,
+          "y": 142,
+          "z": 0,
+          "width": 1248,
+          "height": 562,
+          "config": "{\"name\": \"20000145d6bc4a8a8ed4\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 16, \"y\": 142, \"z\": 0, \"width\": 1248, \"height\": 562}}], \"singleVisual\": {\"visualType\": \"tableEx\", \"projections\": {\"Values\": [{\"queryRef\": \"FollowupsDue.Company\"}, {\"queryRef\": \"FollowupsDue.Role\"}, {\"queryRef\": \"FollowupsDue.DaysSinceAction\"}, {\"queryRef\": \"FollowupsDue.HasContactEmail\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"t0\", \"Entity\": \"FollowupsDue\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Company\"}, \"Name\": \"FollowupsDue.Company\", \"NativeReferenceName\": \"Company\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"Role\"}, \"Name\": \"FollowupsDue.Role\", \"NativeReferenceName\": \"Role\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"DaysSinceAction\"}, \"Name\": \"FollowupsDue.DaysSinceAction\", \"NativeReferenceName\": \"DaysSinceAction\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"HasContactEmail\"}, \"Name\": \"FollowupsDue.HasContactEmail\", \"NativeReferenceName\": \"HasContactEmail\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"t0\"}}, \"Property\": \"DaysSinceAction\"}}}]}, \"drillFilterOtherVisuals\": true, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Waiting more than 7 days'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    }
+  ]
+}

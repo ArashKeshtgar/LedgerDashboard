@@ -494,6 +494,9 @@ describe("recruiter next step", () => {
     expect(plan.queuedConnects).toBe(4);
     // the weekly cap wins when it is tighter than what is left today
     expect(planToday(rows, today, 0, 59).today).toEqual(["f", "c0"]);
+    // a referral contact gets the Persian community message, not the agency one
+    const ref = { ...base, id: "r", source: "referral", connect_accepted: "2026-10-05" };
+    expect(planToday([ref], today, 0).rows[0].next.tag).toBe("#R:community.first_msg_fa");
     expect(plan.rows.find((r) => r.id === "f").next.overdueDays).toBe(6);
   });
 });

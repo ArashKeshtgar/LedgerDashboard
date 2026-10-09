@@ -21,6 +21,12 @@ export const STEPS = {
   checkin: { label: "Monthly check-in", fa: "سر زدن ماهانه", tag: "#R:msg.checkin", field: "followup_sent" },
 };
 
+// The first message depends on who they are (source chosen in the add form).
+const FIRST_MESSAGE_TAG = {
+  inhouse: "#R:msg.inhouse",
+  referral: "#R:community.first_msg_fa",
+};
+
 export function addDays(iso, days) {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
@@ -53,7 +59,9 @@ export function planToday(rows, today, sentToday, sentThisWeek = 0) {
   const withNext = rows.map((r) => {
     const n = nextStep(r, today);
     const overdueDays = n.due ? Math.max(0, daysBetween(n.due, today)) : 0;
-    return { ...r, next: { ...n, ...STEPS[n.step], overdueDays } };
+    const step = { ...STEPS[n.step] };
+    if (n.step === "first_message" && FIRST_MESSAGE_TAG[r.source]) step.tag = FIRST_MESSAGE_TAG[r.source];
+    return { ...r, next: { ...n, ...step, overdueDays } };
   });
 
   const due = withNext

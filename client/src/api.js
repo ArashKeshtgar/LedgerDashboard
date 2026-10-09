@@ -65,6 +65,17 @@ export async function fetchRecruiters() {
   return res.json();
 }
 
+export async function addRecruiter(row) {
+  const res = await fetch(`${API_BASE}/api/recruiters`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rows: [row] }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Failed to add recruiter (${res.status})`);
+  return body;
+}
+
 export async function updateRecruiterStatus(id, field, value) {
   const res = await fetch(`${API_BASE}/api/recruiters/${encodeURIComponent(id)}`, {
     method: "POST",

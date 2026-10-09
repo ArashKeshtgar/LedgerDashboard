@@ -13,6 +13,7 @@ import { slugify, weekStartISO } from "../src/text.js";
 import { resolveContact, ContactValidationError } from "../src/contact.js";
 import { buildFunnel, offerProbability, outcomeOf, scoreBand } from "../src/funnel.js";
 import { confusion, evaluate } from "../src/evaluation.js";
+import { nextStep, planToday } from "../src/recruiterNext.js";
 import { groupRejections, isReviewed, parseReport, reasonBucket, weeklyTrend } from "../src/rejections.js";
 
 describe("csv", () => {
@@ -462,5 +463,35 @@ describe("evaluation", () => {
   it("scores the model's recommendation field where it has one", () => {
     const report = evaluate([item("apply", 80, "engine", "apply_with_caveats"), item("skip", 80, "engine", "apply")]);
     expect(report.recommendation).toEqual({ n: 2, agree: 1, accuracy: 50 });
+  });
+});
+
+describe("recruiter next step", () => {
+  const today = "2026-10-08";
+  const base = { id: "x", name: "A", date_added: "2026-10-01", connect_sent: "", connect_accepted: "", followup_sent: "", replied: "" };
+
+  it("walks connect → wait → stale → first message → follow-up → check-in", () => {
+    expect(nextStep(base, today)).toEqual({ step: "connect", due: "2026-10-01" });
+    expect(nextStep({ ...base, connect_sent: "2026-10-01" }, today).step).toBe("wait_accept");
+    expect(nextStep({ ...base, connect_sent: "2026-09-20" }, today)).toEqual({ step: "stale", due: "2026-10-04" });
+    expect(nextStep({ ...base, connect_sent: "2026-10-01", connect_accepted: "2026-10-02" }, today))
+      .toEqual({ step: "first_message", due: "2026-10-03" });
+    expect(nextStep({ ...base, connect_accepted: "2026-10-02", followup_sent: "2026-10-05" }, today))
+      .toEqual({ step: "followup", due: "2026-10-12" });
+    // a check-in stamped after the reply moves the next one forward
+    expect(nextStep({ ...base, followup_sent: "2026-10-06", replied: "2026-09-01" }, today))
+      .toEqual({ step: "checkin", due: "2026-11-03" });
+  });
+
+  it("lists due work first and caps new connects at what is left today", () => {
+    const rows = [
+      ...Array.from({ length: 7 }, (_, i) => ({ ...base, id: `c${i}`, name: `C${i}` })),
+      { ...base, id: "f", name: "F", connect_accepted: "2026-09-20", followup_sent: "2026-09-25" },
+      { ...base, id: "w", name: "W", connect_sent: "2026-10-07" },
+    ];
+    const plan = planToday(rows, today, 2);
+    expect(plan.today).toEqual(["f", "c0", "c1", "c2"]);
+    expect(plan.queuedConnects).toBe(4);
+    expect(plan.rows.find((r) => r.id === "f").next.overdueDays).toBe(6);
   });
 });

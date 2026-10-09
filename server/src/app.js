@@ -18,6 +18,7 @@ import { passwordMatches, createLoginLimiter, originGuard } from "./security.js"
 import { runProcess, findPython } from "./process.js";
 import { slugify, todayISO, weekStartISO, ISO_DATE_RE } from "./text.js";
 import { RECRUITER_DATE_FIELDS } from "./stores/shape.js";
+import { planToday, CONNECT_DAILY_CAP } from "./recruiterNext.js";
 import { CONTACT_FIELDS, ContactValidationError, resolveContact } from "./contact.js";
 import { isStoreValidationError } from "./stores/sqlStore.js";
 import { registerTruthRoutes } from "./truthRoutes.js";
@@ -1334,8 +1335,11 @@ export function createApp(cfg, deps = {}) {
   // GET /api/recruiters - target list + funnel counts + daily/weekly send rate
   app.get("/api/recruiters", async (req, res) => {
     try {
-      const rows = withRecruiterMeta(await store.listRecruiters());
-      const { sentToday, sentThisWeek, weekStart } = sendCounts(rows);
+      const listed = withRecruiterMeta(await store.listRecruiters());
+      const { today, sentToday, sentThisWeek, weekStart } = sendCounts(listed);
+      // each row gets `next` ({ step, due, tag, ... }); `today` = ids to act on now
+      const plan = planToday(listed, today, sentToday);
+      const rows = plan.rows;
 
       const funnel = {
         added: rows.length,
@@ -1348,7 +1352,9 @@ export function createApp(cfg, deps = {}) {
       res.json({
         rows,
         funnel,
-        daily: { sent: sentToday, cap: 5 },
+        today: plan.today,
+        queuedConnects: plan.queuedConnects,
+        daily: { sent: sentToday, cap: CONNECT_DAILY_CAP },
         weekly: { sent: sentThisWeek, cap: 25, hardCap: 100, weekStart },
       });
     } catch (err) {

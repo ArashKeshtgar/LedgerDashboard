@@ -820,5 +820,46 @@ describe("recruiters", () => {
     expect((await res.json()).stage).toBe("connect_sent");
     expect((await server.call("POST", "/api/recruiters/0", { body: { field: "replied" } })).status).toBe(404);
   });
+
+  // Moved to "applied" long enough ago that the follow-up is due.
+  const applyOn = (folder, date) =>
+    server.call("POST", "/api/pipeline-events", { body: { folder, stage: "applied", date } });
+
+  it("offers applied rows with a due follow-up once, skipping companies already on the list", async () => {
+    // Acme already has Jane Doe on the list; Globex has nobody.
+    server = await start(testConfig(data.root));
+    await applyOn(FOLDER_A, "2026-01-05");
+    await applyOn(FOLDER_B, "2026-01-05");
+
+    const first = await (await server.call("GET", "/api/recruiters/candidates")).json();
+    expect(first.candidates.map((c) => c.folder)).toEqual([FOLDER_B]);
+    expect(first.candidates[0]).toMatchObject({ company: "Globex", role: "Data Engineer" });
+
+    const added = await server.call("POST", "/api/recruiters", {
+      body: { rows: [{ name: "Gil Bates", company: "Globex Inc.", source: "inhouse", for_folder: FOLDER_B }] },
+    });
+    expect(added.status).toBe(201);
+    expect((await (await server.call("GET", "/api/recruiters/candidates")).json()).candidates).toEqual([]);
+
+    const lookups = JSON.parse(readFileSync(path.join(data.engine, "daily", "recruiter_lookups.json"), "utf-8"));
+    expect(lookups[FOLDER_B]).toMatchObject({ result: "added" });
+  });
+
+  it("logs a lookup that found nobody so the application isn't offered again", async () => {
+    server = await start(testConfig(data.root));
+    await applyOn(FOLDER_B, "2026-01-05");
+    expect((await (await server.call("GET", "/api/recruiters/candidates")).json()).candidates).toHaveLength(1);
+
+    const bad = await server.call("POST", "/api/recruiters/lookups", { body: { folder: FOLDER_B, result: "maybe" } });
+    expect(bad.status).toBe(400);
+    const unknown = await server.call("POST", "/api/recruiters/lookups", { body: { folder: "nope", result: "not_found" } });
+    expect(unknown.status).toBe(404);
+
+    const ok = await server.call("POST", "/api/recruiters/lookups", {
+      body: { folder: FOLDER_B, result: "not_found", note: "no recruiter on LinkedIn" },
+    });
+    expect(ok.status).toBe(200);
+    expect((await (await server.call("GET", "/api/recruiters/candidates")).json()).candidates).toEqual([]);
+  });
 });
 });

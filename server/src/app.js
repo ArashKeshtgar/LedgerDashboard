@@ -19,6 +19,9 @@ import { runProcess, findPython } from "./process.js";
 import { slugify, todayISO, weekStartISO, ISO_DATE_RE } from "./text.js";
 import { RECRUITER_DATE_FIELDS } from "./stores/shape.js";
 import { planToday, CONNECT_DAILY_CAP, CONNECT_WEEKLY_CAP } from "./recruiterNext.js";
+import {
+  CANDIDATES_PER_NIGHT, LOOKUP_RESULTS, LOOKUPS_FILE, readLookups, recruiterCandidates,
+} from "./recruiterCandidates.js";
 import { CONTACT_FIELDS, ContactValidationError, resolveContact } from "./contact.js";
 import { isStoreValidationError } from "./stores/sqlStore.js";
 import { registerTruthRoutes } from "./truthRoutes.js";
@@ -1362,10 +1365,53 @@ export function createApp(cfg, deps = {}) {
     }
   });
 
+  // Remember that an application's recruiter was looked up, whatever came of
+  // it, so the nightly run doesn't search the same company again.
+  function recordLookups(entries) {
+    const lookups = readLookups(DAILY_DIR);
+    const today = todayISO();
+    for (const { folder, result, note } of entries) {
+      lookups[folder] = { date: today, result, ...(note ? { note: String(note).slice(0, 300) } : {}) };
+    }
+    mkdirSync(DAILY_DIR, { recursive: true });
+    writeFileAtomic(path.join(DAILY_DIR, LOOKUPS_FILE), JSON.stringify(lookups, null, 2) + "\n");
+  }
+
+  // GET /api/recruiters/candidates?limit=5 - applications still at "applied"
+  // with a follow-up due, at companies with no recruiter on the list yet and
+  // not looked up before, oldest first. The nightly run finds one recruiter
+  // for each and adds them with POST /api/recruiters (for_folder).
+  app.get("/api/recruiters/candidates", async (req, res) => {
+    try {
+      const limit = Math.min(20, Math.max(1, Number.parseInt(req.query.limit, 10) || CANDIDATES_PER_NIGHT));
+      const apps = await withPipeline(await store.listApplications());
+      res.json(recruiterCandidates(apps, await store.listRecruiters(), readLookups(DAILY_DIR), limit));
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // POST /api/recruiters/lookups { folder, result: "added"|"not_found", note? }
+  // - log a lookup that added nobody, so that application isn't offered again.
+  app.post("/api/recruiters/lookups", async (req, res) => {
+    try {
+      const { folder, result, note } = req.body || {};
+      if (!LOOKUP_RESULTS.has(result)) return res.status(400).json({ error: "result must be added or not_found" });
+      const folders = new Set((await store.listApplications()).map((r) => r.folder));
+      if (!folders.has(folder)) return res.status(404).json({ error: "No application with that folder" });
+      recordLookups([{ folder, result, note }]);
+      res.json({ ok: true });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
   // POST /api/recruiters - add a batch of recruiters (used by
   // JobSearch/engine/recruiter_batch.py). Rows whose LinkedIn URL is already
   // on the list are skipped, not duplicated. Body: { rows: [{ name, title,
-  // company, linkedin_url, source?, connect_note?, followup_note?, notes? }] }
+  // company, linkedin_url, source?, connect_note?, followup_note?, notes?,
+  // for_folder? }] } - for_folder = the application this recruiter was found
+  // for; it is logged as looked up (see /api/recruiters/candidates).
   app.post("/api/recruiters", async (req, res) => {
     try {
       const input = Array.isArray(req.body?.rows) ? req.body.rows : null;
@@ -1392,6 +1438,12 @@ export function createApp(cfg, deps = {}) {
       }));
 
       const { added, skipped } = await store.addRecruiters(rows);
+      const forFolders = input.map((r) => r.for_folder).filter(Boolean);
+      if (forFolders.length) {
+        const folders = new Set((await store.listApplications()).map((r) => r.folder));
+        const lookedUp = [...new Set(forFolders.filter((f) => folders.has(f)))];
+        if (lookedUp.length) recordLookups(lookedUp.map((folder) => ({ folder, result: "added" })));
+      }
       res.status(201).json({ added: added.length, skipped: skipped.map((r) => r.linkedin_url || r.name) });
     } catch (err) {
       sendError(res, err);

@@ -7,7 +7,8 @@
     "start": "node index.js",
     "test": "vitest run",
     "migrate:sql": "node scripts/migrate-csv-to-sql.js",
-    "export:csv": "node scripts/export-csv.js"
+    "export:csv": "node scripts/export-csv.js",
+    "sql:doctor": "node scripts/sql-test-doctor.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",

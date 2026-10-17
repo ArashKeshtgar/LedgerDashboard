@@ -26,7 +26,14 @@ function connection(database) {
 export async function createTestDatabase() {
   const name = `LedgerTest_${randomBytes(4).toString("hex")}`;
   const admin = await connectSqlPool(connection("master"));
-  await admin.request().batch(`CREATE DATABASE [${name}]`);
+  try {
+    await admin.request().batch(`CREATE DATABASE [${name}]`);
+  } catch (err) {
+    // Usually a full disk under SQL Server's data folder, or databases left
+    // behind by stopped test runs; `npm run sql:doctor` shows both.
+    err.message += " (run `npm run sql:doctor` in server/ to see free space and leftover test databases)";
+    throw err;
+  }
   const pool = await connectSqlPool(connection(name));
   await runSqlScript(pool, path.join(__dirname, "..", "..", "db", "03-schema.sql"));
 

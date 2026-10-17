@@ -679,7 +679,9 @@ describe("resume engine", () => {
       },
     });
     expect(retry.status).toBe(201);
-  });
+    // Two real child processes, one killed with its tree (taskkill on
+    // Windows): with the SQL store this ran past vitest's 5 s default there.
+  }, 20_000);
 });
 
 describe("undoing a stage marked by mistake", () => {

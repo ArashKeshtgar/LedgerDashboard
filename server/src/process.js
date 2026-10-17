@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "child_process";
+import { spawn } from "child_process";
 import { existsSync } from "fs";
 import path from "path";
 
@@ -41,7 +41,9 @@ export function runProcess(command, args, { timeoutMs = 60_000, cwd } = {}) {
 function killTree(pid, isWindows) {
   if (!pid) return;
   try {
-    if (isWindows) spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true });
+    // Not spawnSync: taskkill can take seconds, and every other request would
+    // wait on it. The child's own "close" event still ends runProcess.
+    if (isWindows) spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }).on("error", () => {});
     else process.kill(-pid, "SIGKILL");
   } catch {
     // already gone

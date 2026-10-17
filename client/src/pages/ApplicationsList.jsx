@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { fetchApplications, fetchPipelineStages, moveApplicationStage } from "../api.js";
 import { TrackBadge, TrackTabs } from "../components/TrackBadge.jsx";
 import { trackOf } from "../track.js";
@@ -85,6 +85,11 @@ export default function ApplicationsList() {
   const [approveError, setApproveError] = useState(null);
   const [scrollIndex, setScrollIndex] = useState(1);
   const tableCardRef = useRef(null);
+  const scrollAreaRef = useRef(null);
+  // The table only scrolls sideways when it is wider than the page; while it
+  // fits, it doesn't, so its header can stick to the top of the page.
+  const [tableWide, setTableWide] = useState(false);
+  const navigate = useNavigate();
   const firstRowRef = useRef(null);
 
   useEffect(() => {
@@ -151,6 +156,18 @@ export default function ApplicationsList() {
       panel.removeEventListener("scroll", onScroll);
       if (frame) cancelAnimationFrame(frame);
     };
+  }, [loading]);
+
+  useEffect(() => {
+    const area = scrollAreaRef.current;
+    const table = area?.querySelector("table");
+    if (!area || !table) return undefined;
+    const check = () => setTableWide(table.offsetWidth > area.clientWidth + 1);
+    const ro = new ResizeObserver(check);
+    ro.observe(area);
+    ro.observe(table);
+    check();
+    return () => ro.disconnect();
   }, [loading]);
 
   if (loading) return <div className="text-center py-5 text-muted">Loading…</div>;
@@ -374,7 +391,7 @@ export default function ApplicationsList() {
       </div>
 
       <div className="table-card" ref={tableCardRef}>
-        <div className="table-scroll-area">
+        <div className={`table-scroll-area${tableWide ? " is-wide" : ""}`} ref={scrollAreaRef}>
           <table className="table table-hover align-middle">
             <thead>
               <tr>
@@ -392,8 +409,15 @@ export default function ApplicationsList() {
                 <tr
                   key={row.id}
                   ref={i === 0 ? firstRowRef : undefined}
-                  className={trackOf(row) === "it" ? "row-track-it" : undefined}
+                  className={`row-clickable${trackOf(row) === "it" ? " row-track-it" : ""}`}
                   style={{ animationDelay: `${Math.min(i * 20, 260)}ms` }}
+                  // A click anywhere on the row opens it, except on its own
+                  // buttons/links or while selecting text to copy.
+                  onClick={(e) => {
+                    if (e.target.closest("a, button, input, select, label")) return;
+                    if (window.getSelection()?.toString()) return;
+                    navigate(`/applications/${row.id}`);
+                  }}
                 >
                   <td className="row-index">{i + 1}</td>
                   <td className="text-muted">

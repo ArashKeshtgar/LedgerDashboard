@@ -151,15 +151,15 @@ body {
 /* The table scrolls with the page — one scroll for everything, so the wheel
    never stops halfway because it hit the end of a box inside the page. The
    header sticks to the top of the page panel instead, and the position
-   readout (.table-scroll-hud) stays pinned to the bottom of the screen. On
-   narrow screens the table may need to scroll sideways, which costs the
-   sticky header (a sideways scroller is a scroll container). */
-.table-scroll-area {
-  overflow-x: clip;
+   readout (.table-scroll-hud) stays pinned to the bottom of the screen.
+   When the table is wider than the page (narrow window, Windows display
+   scaling), ApplicationsList adds .is-wide and it scrolls sideways instead
+   of cutting off the last column; that costs the sticky header, since a
+   sideways scroller is a scroll container. */
+.table-scroll-area.is-wide {
+  overflow-x: auto;
 }
-@media (max-width: 767.98px) {
-  .table-scroll-area { overflow-x: auto; }
-}
+.table-card tbody tr.row-clickable { cursor: pointer; }
 .row-index {
   text-align: end;
   font-size: 0.72rem;

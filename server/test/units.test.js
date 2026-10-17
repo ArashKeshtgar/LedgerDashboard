@@ -13,6 +13,8 @@ import { slugify, weekStartISO } from "../src/text.js";
 import { resolveContact, ContactValidationError } from "../src/contact.js";
 import { buildFunnel, offerProbability, outcomeOf, scoreBand } from "../src/funnel.js";
 import { confusion, evaluate } from "../src/evaluation.js";
+import { PDFDocument } from "pdf-lib";
+import { combineCoverLetterAndResume } from "../src/combinePdf.js";
 import { nextStep, planToday } from "../src/recruiterNext.js";
 import { groupRejections, isReviewed, parseReport, reasonBucket, weeklyTrend } from "../src/rejections.js";
 
@@ -498,5 +500,38 @@ describe("recruiter next step", () => {
     const ref = { ...base, id: "r", source: "referral", connect_accepted: "2026-10-05" };
     expect(planToday([ref], today, 0).rows[0].next.tag).toBe("#R:community.first_msg_fa");
     expect(plan.rows.find((r) => r.id === "f").next.overdueDays).toBe(6);
+  });
+});
+
+describe("combined cover letter + résumé PDF", () => {
+  // Pages of distinct widths, so the order can be read back.
+  async function pdfOf(widths) {
+    const doc = await PDFDocument.create();
+    for (const w of widths) doc.addPage([w, 792]);
+    return doc.save();
+  }
+
+  it("puts the cover letter first, then the résumé, named after the résumé", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "combine-"));
+    writeFileSync(path.join(dir, "Arash_Keshtgar_Resume.pdf"), await pdfOf([600, 601]));
+    writeFileSync(path.join(dir, "Arash_Keshtgar_Cover_Letter.pdf"), await pdfOf([500]));
+    writeFileSync(path.join(dir, "Arash_Keshtgar_Resume.docx"), "x");
+
+    const result = await combineCoverLetterAndResume(dir);
+    expect(result.file).toBe("Arash_Keshtgar_CoverLetter_and_Resume.pdf");
+    const combined = await PDFDocument.load(readFileSync(path.join(dir, result.file)));
+    expect(combined.getPages().map((pg) => pg.getWidth())).toEqual([500, 600, 601]);
+
+    // A rebuild replaces it rather than combining the combined file again.
+    const again = await combineCoverLetterAndResume(dir);
+    expect(again.file).toBe(result.file);
+    expect((await PDFDocument.load(readFileSync(path.join(dir, result.file)))).getPageCount()).toBe(3);
+  });
+
+  it("skips quietly when one of the PDFs is missing", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "combine-"));
+    writeFileSync(path.join(dir, "Resume.pdf"), await pdfOf([600]));
+    expect(await combineCoverLetterAndResume(dir)).toEqual({ skipped: "no cover letter PDF to combine" });
+    expect(readdirSync(dir)).toEqual(["Resume.pdf"]);
   });
 });

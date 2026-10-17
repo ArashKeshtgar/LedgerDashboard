@@ -519,6 +519,33 @@ describe("resume engine", () => {
     expect(readdirSync(data.engine).filter((f) => f.startsWith(".tmp-plan"))).toEqual([]);
   });
 
+  it("build adds the cover letter and résumé combined in one PDF", async () => {
+    const { PDFDocument } = await import("pdf-lib");
+    const pdf = async (pages) => {
+      const doc = await PDFDocument.create();
+      for (let i = 0; i < pages; i++) doc.addPage();
+      return doc.save();
+    };
+    writeFileSync(path.join(data.root, "r.pdf"), await pdf(2));
+    writeFileSync(path.join(data.root, "c.pdf"), await pdf(1));
+    // A stand-in build.py that "renders" both PDFs into the folder.
+    writeFileSync(path.join(data.engine, "build.py"), `
+      const fs = require("fs"), path = require("path"), out = process.argv[3];
+      fs.copyFileSync(${JSON.stringify(path.join(data.root, "r.pdf"))}, path.join(out, "Arash_Keshtgar_Resume.pdf"));
+      fs.copyFileSync(${JSON.stringify(path.join(data.root, "c.pdf"))}, path.join(out, "Arash_Keshtgar_Cover_Letter.pdf"));
+    `);
+    const anthropic = fakeAnthropic(() => packageInput);
+    server = await start(testConfig(data.root), { anthropic });
+
+    const res = await server.call("POST", "/api/packages/build", {
+      body: { folder: FOLDER_A, company: "Acme", role: "Backend Developer", postingText: "posting", base_variant: "dotnet_azure" },
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()).combined_pdf).toBe("Arash_Keshtgar_CoverLetter_and_Resume.pdf");
+    const combined = readFileSync(path.join(data.engine, "applications", FOLDER_A, "Arash_Keshtgar_CoverLetter_and_Resume.pdf"));
+    expect((await PDFDocument.load(combined)).getPageCount()).toBe(3);
+  });
+
   it("build keeps the saved gap tags and score when the request doesn't send them", async () => {
     // The detail page used to send `gaps` instead of `gap_tags`; the server
     // treated "missing" as "empty" and wiped the tags /analyze had saved.

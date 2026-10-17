@@ -4,6 +4,7 @@ import DailyLine from "./components/DailyLine.jsx";
 import UpdateBanner from "./components/UpdateBanner.jsx";
 import LoginGate from "./components/LoginGate.jsx";
 import ScrollDock from "./components/ScrollDock.jsx";
+import AssistantPanel from "./components/AssistantPanel.jsx";
 import { SCROLL_PANEL_ID } from "./scrollPanel.js";
 import ApplicationsList from "./pages/ApplicationsList.jsx";
 import ApplicationDetail from "./pages/ApplicationDetail.jsx";
@@ -52,6 +53,7 @@ export default function App() {
             </div>
           </main>
           <ScrollDock />
+          <AssistantPanel />
         </div>
       </HashRouter>
     </LoginGate>

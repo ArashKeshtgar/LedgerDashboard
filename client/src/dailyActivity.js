@@ -74,6 +74,7 @@ export const COST_KIND_LABEL = {
   reanalyze: "Re-analyze",
   build: "Build package",
   "build-repair": "Build repair",
+  assistant: "Assistant",
 };
 
 export function dailyCost(calls) {

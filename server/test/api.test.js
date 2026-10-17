@@ -862,4 +862,79 @@ describe("recruiters", () => {
     expect((await (await server.call("GET", "/api/recruiters/candidates")).json()).candidates).toEqual([]);
   });
 });
+
+describe("AI assistant", () => {
+  const reply = (obj, extra = {}) => ({
+    model: "claude-opus-5-5",
+    stop_reason: "end_turn",
+    usage: { input_tokens: 1000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 500 },
+    content: [{ type: "text", text: JSON.stringify(obj) }],
+    ...extra,
+  });
+  const fakeBeta = (respond) => {
+    const calls = [];
+    return { calls, beta: { messages: { create: async (req) => { calls.push(req); return respond(req); } } } };
+  };
+
+  it("answers from a ledger snapshot, drops made-up folders and files the cost", async () => {
+    const anthropic = fakeBeta(() => reply({
+      answer: "Follow up with Acme.",
+      actions: [
+        { title: "Email Acme", why: "8 days silent.", folder: FOLDER_A, priority: "high" },
+        { title: "Invented", why: "x", folder: "2026-01-01__Nope__Dev", priority: "urgent" },
+      ],
+    }));
+    server = await start(testConfig(data.root), { anthropic });
+
+    const res = await server.call("POST", "/api/assistant", { body: { mode: "brief" }, headers: { "X-AI-Request": "app" } });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.answer).toBe("Follow up with Acme.");
+    expect(body.actions[0]).toMatchObject({ folder: FOLDER_A, priority: "high" });
+    expect(body.actions[1]).toMatchObject({ folder: null, priority: "medium" });
+
+    const req = anthropic.calls[0];
+    expect(req.output_config.format.type).toBe("json_schema");
+    const snapshot = req.system.map((b) => b.text).join("\n");
+    expect(snapshot).toContain(FOLDER_A);
+    expect(snapshot).not.toContain("contact_email");
+
+    // 1000*4 + 500*20 per million = $0.014
+    expect(body.usd).toBeCloseTo(0.014, 6);
+    const usage = readFileSync(path.join(data.engine, "applications", "_assistant", "ai_usage.jsonl"), "utf-8");
+    expect(JSON.parse(usage.trim())).toMatchObject({ kind: "assistant", model: "claude-opus-5-5" });
+  });
+
+  it("passes earlier turns along for a follow-up question", async () => {
+    const anthropic = fakeBeta(() => reply({ answer: "Two.", actions: [] }));
+    server = await start(testConfig(data.root), { anthropic });
+    const res = await server.call("POST", "/api/assistant", {
+      body: { mode: "ask", question: "And last week?", history: [{ question: "How many this week?", answer: "Three." }] },
+      headers: { "X-AI-Request": "app" },
+    });
+    expect(res.status).toBe(200);
+    expect(anthropic.calls[0].messages.map((m) => m.content)).toEqual(["How many this week?", "Three.", "And last week?"]);
+  });
+
+  it("validates the request and refuses scripts before calling the model", async () => {
+    const anthropic = fakeBeta(() => reply({ answer: "", actions: [] }));
+    server = await start(testConfig(data.root, { aiScriptCalls: "analyze" }), { anthropic });
+    const ai = { "X-AI-Request": "app" };
+    expect((await server.call("POST", "/api/assistant", { body: { mode: "ask" }, headers: ai })).status).toBe(400);
+    expect((await server.call("POST", "/api/assistant", { body: { mode: "other" }, headers: ai })).status).toBe(400);
+    expect((await server.call("POST", "/api/assistant", { body: { mode: "brief" } })).status).toBe(403);
+    expect(anthropic.calls).toHaveLength(0);
+  });
+
+  it("reports a declined or unreadable reply instead of a blank answer", async () => {
+    let n = 0;
+    const anthropic = fakeBeta(() => (++n === 1
+      ? reply({}, { stop_reason: "refusal", content: [] })
+      : { ...reply({}), content: [{ type: "text", text: "not json" }] }));
+    server = await start(testConfig(data.root), { anthropic });
+    const ai = { "X-AI-Request": "app" };
+    expect((await server.call("POST", "/api/assistant", { body: { mode: "brief" }, headers: ai })).status).toBe(422);
+    expect((await server.call("POST", "/api/assistant", { body: { mode: "brief" }, headers: ai })).status).toBe(502);
+  });
+});
 });

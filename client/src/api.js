@@ -132,6 +132,20 @@ export async function updateApplication(id, fields) {
 // request says it came from a click here, not from a script.
 const AI_HEADERS = { "Content-Type": "application/json", "X-AI-Request": "app" };
 
+// The AI assistant panel. mode "brief" (today's briefing) or "ask" (a free
+// question; history = earlier { question, answer } turns for follow-ups).
+// Returns { answer, actions: [{ title, why, priority, folder|null }], usd }.
+export async function askAssistant({ mode, question, history }) {
+  const res = await fetch(`${API_BASE}/api/assistant`, {
+    method: "POST",
+    headers: AI_HEADERS,
+    body: JSON.stringify({ mode, question, history }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `The assistant failed (${res.status})`);
+  return body;
+}
+
 export async function analyzePosting({ company, role, postingText, location, source, posting_url }) {
   const res = await fetch(`${API_BASE}/api/packages/analyze`, {
     method: "POST",

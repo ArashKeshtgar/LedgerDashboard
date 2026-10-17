@@ -77,6 +77,14 @@ export default function Navbar() {
               <span className={`badge rounded-pill ms-1 ${health.error ? "bg-danger" : "bg-warning text-dark"}`}>{alerts}</span>
             )}
           </Link>
+          <button
+            type="button"
+            className="btn btn-sm btn-light rounded-pill ms-2 assistant-launch"
+            title="AI assistant: today's briefing, or ask about your applications"
+            onClick={() => window.dispatchEvent(new Event("assistant-open"))}
+          >
+            ✨ Ask AI
+          </button>
           {passwordRequired && (
             <button
               type="button"

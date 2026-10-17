@@ -8,6 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { FileLockedError, writeFileAtomic } from "./csv.js";
 import { monthUsage, readUsage, recordUsage, summarize, usageCalls, usageRecord } from "./aiUsage.js";
 import { readPostings, similarTo } from "./similar.js";
+import { ASSISTANT_MODEL, ASSISTANT_USAGE_FOLDER, askAssistant, ledgerSnapshot, validateAssistantRequest } from "./assistant.js";
 import { buildFunnel } from "./funnel.js";
 import {
   groupRejections, isReviewed, postingKey, readRejections, readReviewed, REVIEWED_FILE, weeklyTrend,
@@ -883,6 +884,7 @@ export function createApp(cfg, deps = {}) {
     "/api/packages/analyze": "analyze",
     "/api/packages/reanalyze": "analyze",
     "/api/packages/build": "build",
+    "/api/assistant": "assistant",
   };
   app.post(Object.keys(AI_ROUTES), (req, res, next) => {
     if (req.get("x-ai-request") === "app") return next();
@@ -894,6 +896,46 @@ export function createApp(cfg, deps = {}) {
         "Save the posting as a draft with POST /api/applications { postingText } and analyze it from its page.",
       code: "ai_manual_only",
     });
+  });
+
+  // POST /api/assistant - the AI assistant panel. Body: { mode: "brief" | "ask",
+  // question?, history?: [{ question, answer }] }. Read-only: it answers from
+  // a snapshot of the ledger and never changes anything. Its cost is filed
+  // under applications/_assistant/, so the Costs page counts it too.
+  app.post("/api/assistant", async (req, res) => {
+    const input = validateAssistantRequest(req.body);
+    if (input.error) return res.status(400).json({ error: input.error });
+    let client;
+    try {
+      client = anthropicClient();
+    } catch (err) {
+      return res.status(503).json({ error: err.message });
+    }
+    const fileUsage = (message) => {
+      const usage = usageRecord("assistant", message, ASSISTANT_MODEL);
+      if (!usage) return;
+      const dir = path.join(APPLICATIONS_DIR, ASSISTANT_USAGE_FOLDER);
+      mkdirSync(dir, { recursive: true });
+      recordUsage(dir, usage);
+    };
+    try {
+      const snapshot = ledgerSnapshot(await withPipeline(await store.listApplications()));
+      const { answer, actions, message } = await askAssistant(client, snapshot, input);
+      logUsage("assistant", message);
+      fileUsage(message);
+      res.json({ answer, actions, usd: usageRecord("assistant", message, ASSISTANT_MODEL)?.usd ?? null });
+    } catch (err) {
+      if (err.usageMessage) fileUsage(err.usageMessage); // paid for all the same
+      if (err.status && !(err instanceof Anthropic.APIError)) return res.status(err.status).json({ error: err.message });
+      if (err instanceof Anthropic.RateLimitError) {
+        return res.status(429).json({ error: "Claude is busy right now (rate limit). Try again in a minute." });
+      }
+      if (err instanceof Anthropic.APIError) {
+        console.error("[claude] assistant", err.status, err.message);
+        return res.status(502).json({ error: `Claude API error${err.status ? ` (${err.status})` : ""}: ${err.message}` });
+      }
+      sendError(res, err);
+    }
   });
 
   // POST /api/packages/analyze - stage 1 (light). This is the ONLY place a

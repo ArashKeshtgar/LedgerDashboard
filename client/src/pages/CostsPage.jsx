@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchUsage } from "../api.js";
-import { KIND_LABELS, usd } from "../costs.js";
+import { ASSISTANT_USAGE_FOLDER, KIND_LABELS, usd } from "../costs.js";
 
 // What Claude calls cost this month, against the monthly budget, and which
 // packages it went to. Months are UTC, like the stored timestamps.
@@ -125,9 +125,13 @@ export default function CostsPage() {
                     {data.packages.map((p) => (
                       <tr key={p.folder}>
                         <td>
-                          <Link to={`/applications/${encodeURIComponent(p.folder)}`}>
-                            {p.company || p.folder}
-                          </Link>
+                          {p.folder === ASSISTANT_USAGE_FOLDER ? (
+                            "✨ AI assistant"
+                          ) : (
+                            <Link to={`/applications/${encodeURIComponent(p.folder)}`}>
+                              {p.company || p.folder}
+                            </Link>
+                          )}
                           {p.role && <div className="small text-muted">{p.role}</div>}
                         </td>
                         <td className="small">

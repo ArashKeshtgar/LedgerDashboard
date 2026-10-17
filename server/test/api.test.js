@@ -867,7 +867,7 @@ describe("recruiters", () => {
 
 describe("AI assistant", () => {
   const reply = (obj, extra = {}) => ({
-    model: "claude-opus-5-5",
+    model: "claude-sonnet-5-5",
     stop_reason: "end_turn",
     usage: { input_tokens: 1000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 500 },
     content: [{ type: "text", text: JSON.stringify(obj) }],
@@ -901,10 +901,10 @@ describe("AI assistant", () => {
     expect(snapshot).toContain(FOLDER_A);
     expect(snapshot).not.toContain("contact_email");
 
-    // 1000*4 + 500*20 per million = $0.014
-    expect(body.usd).toBeCloseTo(0.014, 6);
+    // 1000*2 + 500*10 per million = $0.007
+    expect(body.usd).toBeCloseTo(0.007, 6);
     const usage = readFileSync(path.join(data.engine, "applications", "_assistant", "ai_usage.jsonl"), "utf-8");
-    expect(JSON.parse(usage.trim())).toMatchObject({ kind: "assistant", model: "claude-opus-5-5" });
+    expect(JSON.parse(usage.trim())).toMatchObject({ kind: "assistant", model: "claude-sonnet-5-5" });
   });
 
   it("passes earlier turns along for a follow-up question", async () => {

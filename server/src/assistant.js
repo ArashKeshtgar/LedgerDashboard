@@ -5,7 +5,7 @@
 // shape, so every suggested action can link to the application it is about
 // and a folder it made up is dropped before the answer leaves the server.
 
-export const ASSISTANT_MODEL = "claude-opus-5-5";
+export const ASSISTANT_MODEL = "claude-sonnet-5-5";
 export const ASSISTANT_USAGE_FOLDER = "_assistant"; // under applications/, never a real application (ids start alphanumeric)
 const NOTES_MAX = 200;
 const QUESTION_MAX = 2000;

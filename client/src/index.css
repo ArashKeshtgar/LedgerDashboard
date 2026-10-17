@@ -143,22 +143,48 @@ body {
   padding: 12px 14px;
   white-space: nowrap;
   position: sticky;
-  top: 0;
+  top: var(--sticky-bar-h, 0px);
   z-index: 2;
   background: #f8f8f9;
   box-shadow: 0 2px 4px -3px rgba(16, 24, 40, 0.10);
 }
 /* The table scrolls with the page — one scroll for everything, so the wheel
-   never stops halfway because it hit the end of a box inside the page. The
-   header sticks to the top of the page panel instead, and the position
-   readout (.table-scroll-hud) stays pinned to the bottom of the screen.
-   When the table is wider than the page (narrow window, Windows display
-   scaling), ApplicationsList adds .is-wide and it scrolls sideways instead
-   of cutting off the last column; that costs the sticky header, since a
-   sideways scroller is a scroll container. */
-.table-scroll-area.is-wide {
-  overflow-x: auto;
+   never stops halfway because it hit the end of a box inside the page. Its
+   header sticks to the top of the page panel, under the sticky bar (track
+   tabs + sideways scrollbar), and the position readout (.table-scroll-hud)
+   stays pinned to the bottom of the screen. A table wider than the card is
+   clipped, never given a scroll box of its own (that would unstick the
+   header): the scrollbar in the sticky bar slides it along
+   (ApplicationsList, handleHScroll). */
+.table-scroll-area {
+  overflow-x: clip;
 }
+.table-sticky-bar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--page-bg);
+  padding: 8px 0 6px;
+  margin-top: -8px;
+}
+.table-sticky-bar .track-tabs { margin-bottom: 0; }
+.table-hscroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-top: 6px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(11, 11, 11, 0.04);
+}
+.table-hscroll::-webkit-scrollbar { height: 10px; }
+.table-hscroll::-webkit-scrollbar-thumb {
+  background: rgba(11, 11, 11, 0.28);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.table-hscroll::-webkit-scrollbar-thumb:hover { background-color: rgba(11, 11, 11, 0.42); }
+.table-section .table-card { margin-top: 8px; }
 .table-card tbody tr.row-clickable { cursor: pointer; }
 .row-index {
   text-align: end;

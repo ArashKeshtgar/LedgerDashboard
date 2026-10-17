@@ -86,8 +86,13 @@ export default function ApplicationsList() {
   const [scrollIndex, setScrollIndex] = useState(1);
   const tableCardRef = useRef(null);
   const scrollAreaRef = useRef(null);
-  // The table only scrolls sideways when it is wider than the page; while it
-  // fits, it doesn't, so its header can stick to the top of the page.
+  // A table wider than the page doesn't scroll in its own box (that would
+  // unstick its header): the sideways scrollbar sits in the sticky bar above
+  // it, with the track tabs, and slides the table along under the clip.
+  const sectionRef = useRef(null);
+  const stickyBarRef = useRef(null);
+  const hScrollRef = useRef(null);
+  const [tableWidth, setTableWidth] = useState(0);
   const [tableWide, setTableWide] = useState(false);
   const navigate = useNavigate();
   const firstRowRef = useRef(null);
@@ -140,10 +145,11 @@ export default function ApplicationsList() {
     function update() {
       frame = 0;
       const rowEl = firstRowRef.current;
-      const head = tableCardRef.current?.querySelector("thead");
+      // A header cell, not <thead>: the cells are what stick.
+      const head = tableCardRef.current?.querySelector("thead th");
       if (!rowEl || !head) return;
       const rowHeight = rowEl.getBoundingClientRect().height || 1;
-      const viewTop = panel.getBoundingClientRect().top + head.getBoundingClientRect().height;
+      const viewTop = head.getBoundingClientRect().bottom;
       const passed = (viewTop - rowEl.getBoundingClientRect().top) / rowHeight;
       setScrollIndex(Math.max(1, Math.round(passed) + 1)); // capped at the row count when shown
     }
@@ -162,13 +168,61 @@ export default function ApplicationsList() {
     const area = scrollAreaRef.current;
     const table = area?.querySelector("table");
     if (!area || !table) return undefined;
-    const check = () => setTableWide(table.offsetWidth > area.clientWidth + 1);
+    const check = () => {
+      const wide = table.offsetWidth > area.clientWidth + 1;
+      setTableWide(wide);
+      setTableWidth(table.offsetWidth);
+      if (!wide) table.style.transform = "";
+      // The header sticks just below the sticky bar.
+      const bar = stickyBarRef.current;
+      if (bar) sectionRef.current?.style.setProperty("--sticky-bar-h", `${bar.offsetHeight}px`);
+    };
     const ro = new ResizeObserver(check);
     ro.observe(area);
     ro.observe(table);
+    if (stickyBarRef.current) ro.observe(stickyBarRef.current);
     check();
-    return () => ro.disconnect();
+
+    // Sideways wheel/trackpad (or Shift+wheel) and a horizontal swipe over the
+    // table move the scrollbar above it; vertical scrolling stays the page's.
+    const bar = () => hScrollRef.current;
+    function onWheel(e) {
+      const h = bar();
+      if (!h || h.scrollWidth <= h.clientWidth) return;
+      const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+      if (!dx) return;
+      e.preventDefault();
+      h.scrollLeft += dx;
+    }
+    let touch = null;
+    function onTouchStart(e) {
+      const t = e.touches[0];
+      touch = { x: t.clientX, y: t.clientY, left: bar()?.scrollLeft || 0, horizontal: null };
+    }
+    function onTouchMove(e) {
+      const h = bar();
+      if (!touch || !h) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touch.x;
+      const dy = t.clientY - touch.y;
+      if (touch.horizontal === null && Math.abs(dx) + Math.abs(dy) > 8) touch.horizontal = Math.abs(dx) > Math.abs(dy);
+      if (touch.horizontal) h.scrollLeft = touch.left - dx;
+    }
+    area.addEventListener("wheel", onWheel, { passive: false });
+    area.addEventListener("touchstart", onTouchStart, { passive: true });
+    area.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      ro.disconnect();
+      area.removeEventListener("wheel", onWheel);
+      area.removeEventListener("touchstart", onTouchStart);
+      area.removeEventListener("touchmove", onTouchMove);
+    };
   }, [loading]);
+
+  function handleHScroll(e) {
+    const table = scrollAreaRef.current?.querySelector("table");
+    if (table) table.style.transform = `translateX(${-e.currentTarget.scrollLeft}px)`;
+  }
 
   if (loading) return <div className="text-center py-5 text-muted">Loading…</div>;
   if (error)
@@ -295,8 +349,6 @@ export default function ApplicationsList() {
 
       <ActivityForecast rows={rows} selectedDay={dayFilter} onSelectDay={setDayFilter} />
 
-      <TrackTabs value={trackFilter} onChange={setTrackFilter} rows={rows} trackOf={trackOf} />
-
       <div className="pipeline-toolbar mb-3">
         <select
           className="form-select"
@@ -390,8 +442,20 @@ export default function ApplicationsList() {
         )}
       </div>
 
+      <div className="table-section" ref={sectionRef}>
+      <div className="table-sticky-bar" ref={stickyBarRef}>
+        <TrackTabs value={trackFilter} onChange={setTrackFilter} rows={rows} trackOf={trackOf} />
+        <div
+          className={`table-hscroll${tableWide ? "" : " d-none"}`}
+          ref={hScrollRef}
+          onScroll={handleHScroll}
+          title="Scroll the table sideways"
+        >
+          <div style={{ width: tableWidth, height: 1 }} />
+        </div>
+      </div>
       <div className="table-card" ref={tableCardRef}>
-        <div className={`table-scroll-area${tableWide ? " is-wide" : ""}`} ref={scrollAreaRef}>
+        <div className="table-scroll-area" ref={scrollAreaRef}>
           <table className="table table-hover align-middle">
             <thead>
               <tr>
@@ -505,6 +569,7 @@ export default function ApplicationsList() {
             </span>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

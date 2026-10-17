@@ -8,7 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { FileLockedError, writeFileAtomic } from "./csv.js";
 import { monthUsage, readUsage, recordUsage, summarize, usageCalls, usageRecord } from "./aiUsage.js";
 import { readPostings, similarTo } from "./similar.js";
-import { combineCoverLetterAndResume } from "./combinePdf.js";
+import { combineCoverLetterAndResume, combineCoverLetterAndResumeDocx } from "./combinePackage.js";
 import { ASSISTANT_MODEL, ASSISTANT_USAGE_FOLDER, askAssistant, ledgerSnapshot, validateAssistantRequest } from "./assistant.js";
 import { buildFunnel } from "./funnel.js";
 import {
@@ -1308,15 +1308,22 @@ export function createApp(cfg, deps = {}) {
       );
       writeFileSync(path.join(folderPath, "CoverLetter.md"), generated.cover_letter_markdown, "utf-8");
 
-      // Cover letter + résumé in one PDF, for portals with a single upload.
-      // A build without PDFs (or with an unreadable one) still succeeds.
-      let combinedPdf = null;
-      try {
-        const combined = await combineCoverLetterAndResume(folderPath);
-        combinedPdf = combined.file || null;
-        if (combined.skipped) console.warn(`[build] ${folder}: combined PDF skipped, ${combined.skipped}`);
-      } catch (err) {
-        console.warn(`[build] ${folder}: combined PDF failed, ${err.message}`);
+      // Cover letter + résumé in one file, PDF and Word, for portals with a
+      // single upload. A build without them (or with one that fails) still
+      // succeeds.
+      const combinedFiles = {};
+      for (const [kind, combine] of [
+        ["pdf", () => combineCoverLetterAndResume(folderPath)],
+        ["docx", () => combineCoverLetterAndResumeDocx(folderPath, python)],
+      ]) {
+        try {
+          const combined = await combine();
+          combinedFiles[kind] = combined.file || null;
+          if (combined.skipped) console.warn(`[build] ${folder}: combined ${kind} skipped, ${combined.skipped}`);
+        } catch (err) {
+          combinedFiles[kind] = null;
+          console.warn(`[build] ${folder}: combined ${kind} failed, ${err.message}`);
+        }
       }
 
       // Refresh the row with the heavier call's numbers (analyze's were an
@@ -1338,7 +1345,8 @@ export function createApp(cfg, deps = {}) {
       const updated = await withPipelineFor(folder);
       res.status(201).json({
         ...updated,
-        combined_pdf: combinedPdf,
+        combined_pdf: combinedFiles.pdf,
+        combined_docx: combinedFiles.docx,
         ...(guardianWarnings.length ? { guardian_warnings: guardianWarnings } : {}),
       });
     } catch (err) {

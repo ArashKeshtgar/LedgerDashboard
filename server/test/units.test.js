@@ -14,7 +14,9 @@ import { resolveContact, ContactValidationError } from "../src/contact.js";
 import { buildFunnel, offerProbability, outcomeOf, scoreBand } from "../src/funnel.js";
 import { confusion, evaluate } from "../src/evaluation.js";
 import { PDFDocument } from "pdf-lib";
-import { combineCoverLetterAndResume } from "../src/combinePdf.js";
+import { combineCoverLetterAndResume, combineCoverLetterAndResumeDocx } from "../src/combinePackage.js";
+import { spawnSync } from "child_process";
+import { findPython } from "../src/process.js";
 import { nextStep, planToday } from "../src/recruiterNext.js";
 import { groupRejections, isReviewed, parseReport, reasonBucket, weeklyTrend } from "../src/rejections.js";
 
@@ -514,7 +516,7 @@ describe("combined cover letter + résumé PDF", () => {
   it("puts the cover letter first, then the résumé, named after the résumé", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "combine-"));
     writeFileSync(path.join(dir, "Arash_Keshtgar_Resume.pdf"), await pdfOf([600, 601]));
-    writeFileSync(path.join(dir, "Arash_Keshtgar_Cover_Letter.pdf"), await pdfOf([500]));
+    writeFileSync(path.join(dir, "CoverLetter.pdf"), await pdfOf([500])); // the name build.py uses
     writeFileSync(path.join(dir, "Arash_Keshtgar_Resume.docx"), "x");
 
     const result = await combineCoverLetterAndResume(dir);
@@ -533,5 +535,44 @@ describe("combined cover letter + résumé PDF", () => {
     writeFileSync(path.join(dir, "Resume.pdf"), await pdfOf([600]));
     expect(await combineCoverLetterAndResume(dir)).toEqual({ skipped: "no cover letter PDF to combine" });
     expect(readdirSync(dir)).toEqual(["Resume.pdf"]);
+  });
+});
+
+// Runs only where Python has python-docx (the résumé engine needs it, so a
+// machine that builds packages has it), like the SQL tests need a server.
+const python = findPython(process.env.PYTHON);
+const hasPythonDocx = spawnSync(python, ["-c", "import docx"], { windowsHide: true }).status === 0;
+
+describe.runIf(hasPythonDocx)("combined cover letter + résumé Word file", () => {
+  const make = (dir) => spawnSync(python, ["-c", `
+import sys
+from docx import Document
+c = Document(); c.add_paragraph("Dear Hiring Team,"); c.add_paragraph("Sincerely, Arash"); c.save(sys.argv[1])
+r = Document(); r.add_paragraph("Arash Keshtgar"); r.add_paragraph("Built things", style="List Bullet"); r.save(sys.argv[2])
+`, path.join(dir, "CoverLetter.docx"), path.join(dir, "Arash_Keshtgar_Resume.docx")], { windowsHide: true });
+
+  it("puts the cover letter, a page break, then the résumé with its bullets", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "combine-docx-"));
+    expect(make(dir).status).toBe(0);
+    const result = await combineCoverLetterAndResumeDocx(dir, python);
+    expect(result.file).toBe("Arash_Keshtgar_CoverLetter_and_Resume.docx");
+
+    const read = spawnSync(python, ["-c", `
+import sys
+from docx import Document
+d = Document(sys.argv[1])
+print("|".join(p.text for p in d.paragraphs if p.text))
+print(any(p.style.name == "List Bullet" for p in d.paragraphs))
+print(sum(1 for br in d.element.body.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}br")))
+`, path.join(dir, result.file)], { encoding: "utf-8", windowsHide: true });
+    expect(read.stdout.trim().split(/\r?\n/)).toEqual([
+      "Dear Hiring Team,|Sincerely, Arash|Arash Keshtgar|Built things", "True", "1",
+    ]);
+  });
+
+  it("skips when there is no cover letter .docx", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "combine-docx-"));
+    writeFileSync(path.join(dir, "Resume.docx"), "x");
+    expect(await combineCoverLetterAndResumeDocx(dir, python)).toEqual({ skipped: "no cover letter .docx to combine" });
   });
 });

@@ -532,7 +532,7 @@ describe("resume engine", () => {
     writeFileSync(path.join(data.engine, "build.py"), `
       const fs = require("fs"), path = require("path"), out = process.argv[3];
       fs.copyFileSync(${JSON.stringify(path.join(data.root, "r.pdf"))}, path.join(out, "Arash_Keshtgar_Resume.pdf"));
-      fs.copyFileSync(${JSON.stringify(path.join(data.root, "c.pdf"))}, path.join(out, "Arash_Keshtgar_Cover_Letter.pdf"));
+      fs.copyFileSync(${JSON.stringify(path.join(data.root, "c.pdf"))}, path.join(out, "CoverLetter.pdf"));
     `);
     const anthropic = fakeAnthropic(() => packageInput);
     server = await start(testConfig(data.root), { anthropic });

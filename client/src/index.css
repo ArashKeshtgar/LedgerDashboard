@@ -40,6 +40,7 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 .app-scroll-panel::-webkit-scrollbar {
   width: 10px;
@@ -125,7 +126,9 @@ body {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  overflow: hidden;
+  /* clip, not hidden: hidden would make the card a scroll container and the
+     sticky header would stick to the card instead of the page. */
+  overflow: clip;
   position: relative;
 }
 .table-card .table {
@@ -145,16 +148,17 @@ body {
   background: #f8f8f9;
   box-shadow: 0 2px 4px -3px rgba(16, 24, 40, 0.10);
 }
-/* A bounded, self-scrolling body (same pattern as the Pipeline board's
-   kanban columns) — needed so the sticky header above actually has
-   something to stick against, and so a long list orients you with a
-   position readout instead of scrolling the whole page out from under
-   the filters/search bar. */
+/* The table scrolls with the page — one scroll for everything, so the wheel
+   never stops halfway because it hit the end of a box inside the page. The
+   header sticks to the top of the page panel instead, and the position
+   readout (.table-scroll-hud) stays pinned to the bottom of the screen. On
+   narrow screens the table may need to scroll sideways, which costs the
+   sticky header (a sideways scroller is a scroll container). */
 .table-scroll-area {
-  max-height: calc(100vh - 360px);
-  min-height: 220px;
-  overflow-y: auto;
-  overflow-x: auto;
+  overflow-x: clip;
+}
+@media (max-width: 767.98px) {
+  .table-scroll-area { overflow-x: auto; }
 }
 .row-index {
   text-align: end;
@@ -163,19 +167,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .table-scroll-hud {
-  position: absolute;
-  left: 14px;
-  bottom: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  position: sticky;
+  bottom: 0;
+  height: 0;
   z-index: 3;
   pointer-events: none;
 }
-.table-scroll-hud > * {
-  pointer-events: auto;
-}
 .table-scroll-hud-pos {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
   background: rgba(11, 11, 11, 0.78);
   color: #fff;
   font-size: 0.72rem;
@@ -183,10 +184,6 @@ body {
   padding: 5px 10px;
   border-radius: 999px;
   font-variant-numeric: tabular-nums;
-  box-shadow: var(--shadow-md);
-}
-.table-scroll-top {
-  background: var(--surface);
   box-shadow: var(--shadow-md);
 }
 .table-card tbody td {
@@ -477,7 +474,6 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 140px;
-  max-height: calc(100vh - 280px);
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 .pipeline-col-over {
@@ -1145,3 +1141,75 @@ tr.fact-highlight > td {
   .wx-summary { margin-left: 0; }
 }
 
+
+/* ---- Scroll dock (components/ScrollDock.jsx) ----
+   Floating top / page-up / position / page-down / bottom control for the
+   page panel. Up and down scroll one screen per click, continuously while
+   held. */
+.scroll-dock {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1030;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.scroll-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #4a4a47;
+  cursor: pointer;
+  touch-action: none;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.scroll-dock-btn svg { width: 16px; height: 16px; }
+.scroll-dock-btn:hover:not(:disabled) { background: rgba(42, 120, 214, 0.10); color: #1f5fad; }
+.scroll-dock-btn:active:not(:disabled) { background: rgba(42, 120, 214, 0.20); }
+.scroll-dock-btn:disabled { opacity: 0.3; cursor: default; }
+.scroll-dock-btn:focus-visible { outline: 2px solid #2a78d6; outline-offset: 1px; }
+.scroll-dock-pos {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: #6b6a66;
+  font-variant-numeric: tabular-nums;
+}
+.scroll-dock-bar {
+  position: relative;
+  width: 4px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(11, 11, 11, 0.08);
+  overflow: hidden;
+}
+.scroll-dock-bar-fill {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  background: #2a78d6;
+  border-radius: 999px;
+}
+@media (max-width: 575.98px) {
+  .scroll-dock { right: 10px; bottom: 10px; gap: 2px; padding: 4px; }
+  .scroll-dock-btn { width: 30px; height: 30px; }
+  .scroll-dock-bar { height: 24px; }
+}

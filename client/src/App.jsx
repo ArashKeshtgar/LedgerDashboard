@@ -3,6 +3,8 @@ import Navbar from "./components/Navbar.jsx";
 import DailyLine from "./components/DailyLine.jsx";
 import UpdateBanner from "./components/UpdateBanner.jsx";
 import LoginGate from "./components/LoginGate.jsx";
+import ScrollDock from "./components/ScrollDock.jsx";
+import { SCROLL_PANEL_ID } from "./scrollPanel.js";
 import ApplicationsList from "./pages/ApplicationsList.jsx";
 import ApplicationDetail from "./pages/ApplicationDetail.jsx";
 import NewApplication from "./pages/NewApplication.jsx";
@@ -25,7 +27,7 @@ export default function App() {
       <HashRouter>
         <div className="app-shell">
           <Navbar />
-          <main className="app-scroll-panel">
+          <main className="app-scroll-panel" id={SCROLL_PANEL_ID}>
             <div className="container py-4">
               <UpdateBanner />
               <DailyLine />
@@ -49,6 +51,7 @@ export default function App() {
               </Routes>
             </div>
           </main>
+          <ScrollDock />
         </div>
       </HashRouter>
     </LoginGate>

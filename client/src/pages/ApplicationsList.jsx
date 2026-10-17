@@ -5,6 +5,7 @@ import { TrackBadge, TrackTabs } from "../components/TrackBadge.jsx";
 import { trackOf } from "../track.js";
 import ActivityForecast from "../components/ActivityForecast.jsx";
 import { rejectedDay, sentDay } from "../dailyActivity.js";
+import { getScrollPanel } from "../scrollPanel.js";
 
 function matchChipClass(score) {
   const n = Number(score);
@@ -57,14 +58,6 @@ function SpinnerIcon() {
     </svg>
   );
 }
-function UpArrowIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 10l4-4 4 4" />
-    </svg>
-  );
-}
-
 const MATCH_FILTERS = [
   { key: "all", label: "All" },
   { key: "high", label: "≥55%" },
@@ -90,8 +83,8 @@ export default function ApplicationsList() {
   const [dayFilter, setDayFilter] = useState(null);
   const [approvingFolder, setApprovingFolder] = useState(null);
   const [approveError, setApproveError] = useState(null);
-  const [scrollPos, setScrollPos] = useState({ index: 1, showTop: false });
-  const scrollAreaRef = useRef(null);
+  const [scrollIndex, setScrollIndex] = useState(1);
+  const tableCardRef = useRef(null);
   const firstRowRef = useRef(null);
 
   useEffect(() => {
@@ -115,18 +108,50 @@ export default function ApplicationsList() {
       .catch(() => {});
   }, []);
 
-  // Filtering to a different set makes the old scroll position/row-count
-  // meaningless (row 12 of "all" isn't row 12 of "≥55% match") — snap back
-  // to the top and reset the position readout whenever a filter changes.
+  // Filtering to a different set makes the old position meaningless (row 12
+  // of "all" isn't row 12 of "≥55% match"): if the table's top has scrolled
+  // out of view, bring it back so the new result starts at row 1.
   useEffect(() => {
-    if (scrollAreaRef.current) scrollAreaRef.current.scrollTop = 0;
-    setScrollPos({ index: 1, showTop: false });
+    const panel = getScrollPanel();
+    const card = tableCardRef.current;
+    if (panel && card && card.getBoundingClientRect().top < panel.getBoundingClientRect().top) {
+      card.scrollIntoView({ block: "start" });
+    }
+    setScrollIndex(1);
   }, [query, stageFilter, sourceFilter, matchFilter, followupOnly, dateFrom, dateTo, trackFilter, dayFilter]);
 
   const sources = useMemo(
     () => [...new Set(rows.map((r) => r.source).filter(Boolean))].sort(),
     [rows]
   );
+
+  // The table scrolls with the page (one scroll for everything); this tracks
+  // which row sits just under the sticky header (by row height, since every
+  // row is the same height) so a long list can show "you're at #N of M".
+  useEffect(() => {
+    const panel = getScrollPanel();
+    if (!panel) return undefined;
+    let frame = 0;
+    function update() {
+      frame = 0;
+      const rowEl = firstRowRef.current;
+      const head = tableCardRef.current?.querySelector("thead");
+      if (!rowEl || !head) return;
+      const rowHeight = rowEl.getBoundingClientRect().height || 1;
+      const viewTop = panel.getBoundingClientRect().top + head.getBoundingClientRect().height;
+      const passed = (viewTop - rowEl.getBoundingClientRect().top) / rowHeight;
+      setScrollIndex(Math.max(1, Math.round(passed) + 1)); // capped at the row count when shown
+    }
+    function onScroll() {
+      if (!frame) frame = requestAnimationFrame(update);
+    }
+    panel.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => {
+      panel.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [loading]);
 
   if (loading) return <div className="text-center py-5 text-muted">Loading…</div>;
   if (error)
@@ -218,22 +243,6 @@ export default function ApplicationsList() {
     }
   }
 
-  // Tracks roughly which row is at the top of the scrolled table (by row
-  // height, since every row is now the same height) so a long list can show
-  // "you're at #N of M" instead of losing all sense of position once the
-  // header scrolls out of view.
-  function handleTableScroll() {
-    const el = scrollAreaRef.current;
-    const rowEl = firstRowRef.current;
-    if (!el || !rowEl || filtered.length === 0) return;
-    const rowHeight = rowEl.getBoundingClientRect().height || 1;
-    const index = Math.min(filtered.length, Math.max(1, Math.round(el.scrollTop / rowHeight) + 1));
-    setScrollPos({ index, showTop: el.scrollTop > 240 });
-  }
-
-  function scrollToTop() {
-    scrollAreaRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }
 
   return (
     <div>
@@ -364,8 +373,8 @@ export default function ApplicationsList() {
         )}
       </div>
 
-      <div className="table-card">
-        <div className="table-scroll-area" ref={scrollAreaRef} onScroll={handleTableScroll}>
+      <div className="table-card" ref={tableCardRef}>
+        <div className="table-scroll-area">
           <table className="table table-hover align-middle">
             <thead>
               <tr>
@@ -468,19 +477,8 @@ export default function ApplicationsList() {
         {filtered.length > 8 && (
           <div className="table-scroll-hud">
             <span className="table-scroll-hud-pos">
-              {Math.min(scrollPos.index, filtered.length)} / {filtered.length}
+              {Math.min(scrollIndex, filtered.length)} / {filtered.length}
             </span>
-            {scrollPos.showTop && (
-              <button
-                type="button"
-                className="icon-btn table-scroll-top"
-                title="Back to top"
-                aria-label="Back to top"
-                onClick={scrollToTop}
-              >
-                <UpArrowIcon />
-              </button>
-            )}
           </div>
         )}
       </div>

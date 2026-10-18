@@ -143,21 +143,21 @@ export default function StatsPage() {
       )}
 
       <div className="row mb-4 g-3">
-        <div className="col-sm-4">
+        <div className="col-6 col-sm-4">
           <div className="stat-card text-center" style={{ "--stat-accent": "#2a78d6" }}>
             <div className="stat-icon mb-1">📨</div>
             <div className="text-muted small">Total applications</div>
             <div className="fs-2 fw-semibold">{total}</div>
           </div>
         </div>
-        <div className="col-sm-4">
+        <div className="col-6 col-sm-4">
           <div className="stat-card text-center" style={{ "--stat-accent": "#1baf7a" }}>
             <div className="stat-icon mb-1">🎯</div>
             <div className="text-muted small">Average match score</div>
             <div className="fs-2 fw-semibold">{avgMatch}%</div>
           </div>
         </div>
-        <div className="col-sm-4">
+        <div className="col-12 col-sm-4">
           <div className="stat-card text-center" style={{ "--stat-accent": "#eda100" }}>
             <div className="stat-icon mb-1">🌐</div>
             <div className="text-muted small">Sources used</div>

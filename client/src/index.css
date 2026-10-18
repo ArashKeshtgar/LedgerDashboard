@@ -29,6 +29,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* phones: the visible height, without the browser's bars */
 }
 .app-navbar {
   box-shadow: var(--shadow-sm);
@@ -71,6 +72,42 @@ body {
 }
 .app-navbar .nav-link.active {
   background: rgba(255, 255, 255, 0.16);
+}
+.app-logo {
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+.app-nav-links {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-right: 8px;
+}
+.app-nav-links .nav-link {
+  padding: 6px 11px !important;
+}
+.app-navbar .navbar-toggler {
+  border-color: rgba(255, 255, 255, 0.2);
+  padding: 4px 8px;
+}
+.app-navbar .navbar-toggler:focus {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+/* The folded menu on phones and tablets: a two-column grid of links. */
+@media (max-width: 1399.98px) {
+  .app-navbar {
+    margin-bottom: 0 !important;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .app-nav-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 4px;
+    padding: 10px 0 4px;
+  }
+  .app-navbar .navbar-divider { display: none; }
+  .app-nav-logout { justify-self: start; }
 }
 
 .page-title {
@@ -396,7 +433,9 @@ body {
 /* ---- Responsive ---- */
 @media (max-width: 576px) {
   .card-body { padding: 14px; }
-  .viz-row { grid-template-columns: 96px 1fr 40px; }
+  .app-scroll-panel > .container { padding-top: 16px !important; padding-bottom: 16px !important; }
+  .page-title { font-size: 1.4rem; }
+  .viz-row { grid-template-columns: 88px 1fr auto; }
 }
 
 /* ---- Filter toolbar (Pipeline + Applications) ---- */
@@ -1234,10 +1273,11 @@ tr.fact-highlight > td {
   background: #2a78d6;
   border-radius: 999px;
 }
-@media (max-width: 575.98px) {
-  .scroll-dock { right: 10px; bottom: 10px; gap: 2px; padding: 4px; }
-  .scroll-dock-btn { width: 30px; height: 30px; }
-  .scroll-dock-bar { height: 24px; }
+/* Phones scroll with a swipe, and the dock would cover the right edge of
+   cards and buttons, so it is hidden there (navigation scroll restore keeps
+   working; it lives in the component, not the buttons). */
+@media (max-width: 767.98px) {
+  .scroll-dock { display: none; }
 }
 
 /* ---- AI assistant drawer (components/AssistantPanel.jsx) ---- */

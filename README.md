@@ -72,6 +72,10 @@ To run it as a container on your own machine over plain `http://localhost`, add 
 
 The image contains Node, Python and LibreOffice, runs as the unprivileged `node` user, and sets `NODE_ENV=production`. The job-search data is **never** baked into the image (same reason it isn't in git). Mount it at `/data/JobSearch`, and make sure that directory is writable by uid 1000.
 
+## Releases
+
+Push a version tag (`git tag v1.2.0 && git push origin v1.2.0`) and `.github/workflows/release.yml` publishes a GitHub release with generated notes and the built web app (`client/dist`) attached.
+
 ## Tests
 
 ```bash

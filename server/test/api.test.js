@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import path from "path";
+import Anthropic from "@anthropic-ai/sdk";
 import { FOLDER_A, FOLDER_B, fakeAnthropic, makeDataDir, startApp, testConfig } from "./fixture.js";
 import { createCsvStore } from "../src/stores/csvStore.js";
 import { createSqlStore } from "../src/stores/sqlStore.js";
@@ -253,6 +254,19 @@ describe("resume engine", () => {
     expect(body.id).toBe(body.folder);
     expect(readFileSync(path.join(data.engine, "applications", body.folder, "posting.txt"), "utf-8"))
       .toBe("We need SQL.");
+  });
+
+  it("analyze reports a rejected API key instead of a bare 500", async () => {
+    const anthropic = fakeAnthropic(() => {
+      throw new Anthropic.AuthenticationError(401, { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, "invalid x-api-key", new Headers());
+    });
+    server = await start({ ...testConfig(data.root), production: true }, { anthropic });
+
+    const res = await server.call("POST", "/api/packages/analyze", {
+      body: { company: "Initech", role: "SQL Developer", postingText: "We need SQL." },
+    });
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toMatch(/ANTHROPIC_API_KEY/);
   });
 
   it("analyze sends a strict tool and cleans gap_tags before saving", async () => {

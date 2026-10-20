@@ -68,6 +68,19 @@ export function createApp(cfg, deps = {}) {
     if (err instanceof ContactValidationError) return res.status(400).json({ error: err.message });
     // A value the database refused (bad date, too long, duplicate, constraint).
     if (isStoreValidationError(err)) return res.status(400).json({ error: `Invalid value: ${err.message}` });
+    // Claude's own errors say what to fix (a revoked key, no credit) and hold
+    // no server paths, so they're shown even in production.
+    if (err instanceof Anthropic.RateLimitError) {
+      return res.status(429).json({ error: "Claude is busy right now (rate limit). Try again in a minute." });
+    }
+    if (err instanceof Anthropic.AuthenticationError) {
+      console.error("[claude]", err.status, err.message);
+      return res.status(502).json({ error: "Claude rejected the API key (401) — put a valid ANTHROPIC_API_KEY in server/.env and restart." });
+    }
+    if (err instanceof Anthropic.APIError) {
+      console.error("[claude]", err.status, err.message);
+      return res.status(502).json({ error: `Claude API error${err.status ? ` (${err.status})` : ""}: ${err.message}` });
+    }
     console.error(err);
     res.status(500).json({ error: cfg.production ? "Internal server error" : err.message });
   }

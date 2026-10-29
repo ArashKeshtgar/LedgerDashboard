@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { fetchApplications, fetchPipelineStages, moveApplicationStage } from "../api.js";
 import { TrackBadge, TrackTabs } from "../components/TrackBadge.jsx";
 import { trackOf } from "../track.js";
+import { nextStage } from "../nextStage.js";
 import ActivityForecast from "../components/ActivityForecast.jsx";
 import { rejectedDay, sentDay } from "../dailyActivity.js";
 import { getScrollPanel } from "../scrollPanel.js";
@@ -51,6 +52,13 @@ function ArrowIcon() {
     </svg>
   );
 }
+function NextIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3l5 5-5 5M9 3l5 5-5 5" />
+    </svg>
+  );
+}
 function SpinnerIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -69,6 +77,8 @@ export default function ApplicationsList() {
   const [rows, setRows] = useState([]);
   const [stageLabels, setStageLabels] = useState({});
   const [stageOptions, setStageOptions] = useState([]);
+  // The ordered (non-closed) stages, for the "next stage" button.
+  const [pipelineStages, setPipelineStages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
@@ -114,6 +124,7 @@ export default function ApplicationsList() {
         });
         setStageLabels(map);
         setStageOptions(all);
+        setPipelineStages(s.stages || []);
       })
       .catch(() => {});
   }, []);
@@ -298,6 +309,24 @@ export default function ApplicationsList() {
     }
   }
 
+  // Same pipeline.csv event as dragging the card one column right on the
+  // Pipeline board, so the board shows the new stage too.
+  async function handleNext(folder, stageKey) {
+    setApproveError(null);
+    setApprovingFolder(folder);
+    const prevRows = rows;
+    setRows((rs) => rs.map((r) => (r.folder === folder ? { ...r, stage: stageKey } : r)));
+    try {
+      const updated = await moveApplicationStage(folder, stageKey);
+      setRows((rs) => rs.map((r) => (r.folder === folder ? { ...r, ...updated } : r)));
+    } catch (e) {
+      setRows(prevRows);
+      setApproveError(e.message);
+    } finally {
+      setApprovingFolder(null);
+    }
+  }
+
   async function handleReject(folder) {
     setApproveError(null);
     setApprovingFolder(folder);
@@ -465,7 +494,7 @@ export default function ApplicationsList() {
                 <th>Location</th>
                 <th style={{ width: 84 }}>Match</th>
                 <th style={{ width: 150 }}>Stage</th>
-                <th className="text-end" style={{ width: 120 }}>Actions</th>
+                <th className="text-end" style={{ width: 150 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -523,6 +552,26 @@ export default function ApplicationsList() {
                           {approvingFolder === row.folder ? <SpinnerIcon /> : <CheckIcon />}
                         </button>
                       )}
+                      {(() => {
+                        const next = nextStage(pipelineStages, row.stage);
+                        if (!next) return null;
+                        return (
+                          <button
+                            type="button"
+                            className={`icon-btn icon-btn-next${approvingFolder === row.folder ? " icon-btn-spin" : ""}`}
+                            disabled={approvingFolder === row.folder}
+                            title={`Next stage: ${next.icon} ${next.label}`}
+                            aria-label={`Move to ${next.label}`}
+                            onClick={() => {
+                              if (window.confirm(`Move ${row.company} to ${next.icon} ${next.label}?`)) {
+                                handleNext(row.folder, next.key);
+                              }
+                            }}
+                          >
+                            {approvingFolder === row.folder ? <SpinnerIcon /> : <NextIcon />}
+                          </button>
+                        );
+                      })()}
                       {row.stage !== "draft" && !row.isTerminal && (
                         <button
                           type="button"

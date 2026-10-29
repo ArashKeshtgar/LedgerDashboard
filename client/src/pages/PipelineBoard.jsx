@@ -129,6 +129,10 @@ function PendingCard({ app, onApprove, approving, onDelete, deleting }) {
   );
 }
 
+// A column longer than this shows its first cards and a "Show N more"
+// button, so one busy stage (Applied) doesn't stretch the page for screens.
+const COLUMN_LIMIT = 8;
+
 const MATCH_FILTERS = [
   { key: "all", label: "All" },
   { key: "high", label: "≥55%" },
@@ -162,6 +166,10 @@ export default function PipelineBoard() {
   const [approvingFolder, setApprovingFolder] = useState(null);
   const [deletingFolder, setDeletingFolder] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+  // Drafts are folded into one line until opened; they aren't in the
+  // pipeline yet and used to take the top of the page.
+  const [showPending, setShowPending] = useState(false);
+  const [expandedCols, setExpandedCols] = useState(() => new Set());
 
   useEffect(() => {
     Promise.all([fetchApplications(), fetchPipelineStages()])
@@ -380,13 +388,23 @@ export default function PipelineBoard() {
       {pending.length > 0 && (
         <div className="mb-4">
           <h6 className="text-muted mb-2">
-            📝 Pending approval <span className="pipeline-col-count">{pending.length}</span> — approve to send and add to the pipeline
+            <button
+              type="button"
+              className="pipeline-pending-toggle"
+              aria-expanded={showPending}
+              onClick={() => setShowPending((v) => !v)}
+            >
+              {showPending ? "▾" : "▸"} 📝 Drafts not sent yet{" "}
+              <span className="pipeline-col-count">{pending.length}</span>
+            </button>{" "}
+            — built or analyzed but never sent; approve one once you've applied, or delete it
           </h6>
           {deleteError && (
             <div className="alert alert-danger py-2 px-3 mb-2" role="alert">
               {deleteError}
             </div>
           )}
+          {showPending && (
           <div className="pipeline-pending-row">
             {pending.map((a) => (
               <PendingCard
@@ -399,6 +417,7 @@ export default function PipelineBoard() {
               />
             ))}
           </div>
+          )}
         </div>
       )}
 
@@ -406,6 +425,15 @@ export default function PipelineBoard() {
         {boardStages.map((s) => {
           const cards = inStage(s.key);
           const isOver = dragOverKey === s.key;
+          const expanded = expandedCols.has(s.key);
+          const shown = expanded ? cards : cards.slice(0, COLUMN_LIMIT);
+          const toggleExpanded = () =>
+            setExpandedCols((set) => {
+              const next = new Set(set);
+              if (next.has(s.key)) next.delete(s.key);
+              else next.add(s.key);
+              return next;
+            });
           return (
             <div
               key={s.key}
@@ -428,7 +456,7 @@ export default function PipelineBoard() {
                 <span className="pipeline-col-count">{cards.length}</span>
               </div>
               <div className="pipeline-col-body">
-                {cards.map((a) => (
+                {shown.map((a) => (
                   <Card
                     key={a.id}
                     app={a}
@@ -440,6 +468,15 @@ export default function PipelineBoard() {
                     loggingFollowup={followupPendingFolder === a.folder}
                   />
                 ))}
+                {cards.length > COLUMN_LIMIT && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary rounded-pill pipeline-col-more"
+                    onClick={toggleExpanded}
+                  >
+                    {expanded ? "Show less" : `Show ${cards.length - COLUMN_LIMIT} more`}
+                  </button>
+                )}
                 {cards.length === 0 && (
                   <div className="pipeline-empty">{isOver ? "Drop here" : "—"}</div>
                 )}

@@ -13,6 +13,7 @@ import {
   fileUrl,
 } from "../api.js";
 import StageTimeline from "../components/StageTimeline.jsx";
+import { nextStage } from "../nextStage.js";
 import ContactCard from "../components/ContactCard.jsx";
 import ContactEditor from "../components/ContactEditor.jsx";
 import { daysUntilFollowup, followupMailto } from "../contact.js";
@@ -925,6 +926,24 @@ export default function ApplicationDetail() {
                 {followupError}
               </div>
             )}
+
+            {(() => {
+              const next = nextStage(stages.stages, app.stage);
+              if (!next) return null;
+              return (
+                <div className="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary rounded-pill"
+                    disabled={stageUpdatePending}
+                    onClick={() => handleStageUpdate(next.key)}
+                  >
+                    {stageUpdatePending ? "Moving…" : `⏭️ Next stage: ${next.icon} ${next.label}`}
+                  </button>
+                  <span className="small text-muted">Moves the card on the Pipeline board too.</span>
+                </div>
+              );
+            })()}
 
             <StageUpdateForm
               options={[...(stages.stages || []), ...(stages.terminal || [])]}

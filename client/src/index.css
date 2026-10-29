@@ -343,6 +343,9 @@ body {
 .icon-btn-reject:hover:not(:disabled) {
   color: #b5372f; border-color: rgba(208, 59, 59, 0.35); background: rgba(208, 59, 59, 0.08);
 }
+.icon-btn-next:hover:not(:disabled) {
+  color: #6b3fc4; border-color: rgba(124, 58, 237, 0.35); background: rgba(124, 58, 237, 0.08);
+}
 .icon-btn-details:hover:not(:disabled) {
   color: #1f5fad; border-color: rgba(42, 120, 214, 0.35); background: rgba(42, 120, 214, 0.08);
 }
@@ -530,7 +533,21 @@ body {
   gap: 12px;
   overflow-x: auto;
   padding-bottom: 8px;
-  align-items: start;
+  /* Every column as tall as the longest one, so a card dragged from far
+     down a long column still has the other columns under the pointer to
+     drop on (with "start" they ended after ~140px). */
+  align-items: stretch;
+}
+.pipeline-col-more {
+  font-size: 0.75rem;
+}
+.pipeline-pending-toggle {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .pipeline-col {
   background: #eceef1;

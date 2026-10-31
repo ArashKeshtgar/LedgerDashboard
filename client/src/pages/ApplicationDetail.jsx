@@ -22,6 +22,7 @@ import { trackOf } from "../track.js";
 import SaveToPcButton from "../components/SaveToPcButton.jsx";
 import PackageCostCard from "../components/PackageCostCard.jsx";
 import SimilarPostingsCard from "../components/SimilarPostingsCard.jsx";
+import InterviewsCard from "../components/InterviewsCard.jsx";
 
 // Pipeline event dates are usually a plain YYYY-MM-DD, but the "Record a
 // stage update" form can attach a time too ("...T14:30") — show that as a
@@ -971,6 +972,8 @@ export default function ApplicationDetail() {
           </div>
         </div>
       )}
+
+      <InterviewsCard folder={app.folder} />
 
       {app.interviewQuestions && (
         <div className="card mb-4">

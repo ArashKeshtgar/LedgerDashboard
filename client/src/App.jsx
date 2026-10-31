@@ -21,6 +21,7 @@ import CostsPage from "./pages/CostsPage.jsx";
 import FunnelPage from "./pages/FunnelPage.jsx";
 import RejectionsPage from "./pages/RejectionsPage.jsx";
 import EvalPage from "./pages/EvalPage.jsx";
+import InterviewsPage from "./pages/InterviewsPage.jsx";
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
                 <Route path="/funnel" element={<FunnelPage />} />
                 <Route path="/rejections" element={<RejectionsPage />} />
                 <Route path="/recruiters" element={<RecruitersBoard />} />
+                <Route path="/interviews" element={<InterviewsPage />} />
                 <Route path="/truth" element={<TruthBankPage />} />
                 <Route path="/gaps" element={<GapsPage />} />
                 <Route path="/resume" element={<ResumePage />} />

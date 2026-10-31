@@ -84,6 +84,57 @@ describe("evaluation", () => {
   });
 });
 
+describe("interviews", () => {
+  const dir = () => path.join(data.engine, "interviews");
+  const writeBank = (bank) => {
+    mkdirSync(dir(), { recursive: true });
+    writeFileSync(path.join(dir(), "question_bank.json"), typeof bank === "string" ? bank : JSON.stringify(bank), "utf-8");
+  };
+  const interview = (id, folder) => ({ id, date: "2026-09-10", company: "Acme", application_folder: folder, record: `${id}.md` });
+
+  beforeEach(async () => {
+    server = await start(testConfig(data.root));
+  });
+
+  it("is an empty bank before the file exists", async () => {
+    const body = await (await server.call("GET", "/api/interviews")).json();
+    expect(body).toEqual({ updated: null, interviews: [], questions: [] });
+  });
+
+  it("serves interviews with their record and whether the application is tracked", async () => {
+    writeBank({
+      updated: "2026-09-11",
+      interviews: [interview("i1", FOLDER_A), interview("i2", "2026-09-05__Gone__Role")],
+      questions: [{ id: "q1", question: "How do you deploy an API?", source: "asked", asked_in: ["i1"] }],
+    });
+    writeFileSync(path.join(dir(), "i1.md"), "# Acme notes", "utf-8");
+    const body = await (await server.call("GET", "/api/interviews")).json();
+    expect(body.interviews.map((i) => [i.id, i.tracked, i.recordText])).toEqual([
+      ["i1", true, "# Acme notes"],
+      ["i2", false, null],
+    ]);
+    expect(body.questions[0]).toMatchObject({ id: "q1", asked_in: ["i1"] });
+  });
+
+  it("never reads a record outside the interviews folder", async () => {
+    writeFileSync(path.join(data.engine, "secret.md"), "nope", "utf-8");
+    writeBank({ interviews: [{ ...interview("i1", FOLDER_A), record: "../secret.md" }], questions: [] });
+    const body = await (await server.call("GET", "/api/interviews")).json();
+    expect(body.interviews[0].recordText).toBeNull();
+  });
+
+  it("names the mistake in a hand-edited bank", async () => {
+    writeBank("{ not json");
+    let res = await server.call("GET", "/api/interviews");
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toMatch(/not valid JSON/);
+
+    writeBank({ interviews: [], questions: [{ id: "q1", question: "?", asked_in: ["missing"] }] });
+    res = await server.call("GET", "/api/interviews");
+    expect((await res.json()).error).toMatch(/unknown interview "missing"/);
+  });
+});
+
 describe("cross-origin guard", () => {
   beforeEach(async () => {
     server = await start(testConfig(data.root));

@@ -291,3 +291,5 @@ export const fetchRejections = () => request("GET", "/api/rejections");
 export const fetchRejectionCount = () => request("GET", "/api/rejections?summary=1");
 export const reviewRejections = (keys, reviewed = true) =>
   request("POST", "/api/rejections/review", { keys, reviewed });
+
+export const fetchInterviews = () => request("GET", "/api/interviews");

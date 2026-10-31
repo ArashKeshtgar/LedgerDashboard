@@ -95,6 +95,7 @@ export default function Navbar() {
               {rejected > 0 && <span className="badge rounded-pill ms-1 bg-secondary">{rejected}</span>}
             </Link>
             <Link className={linkClass("/recruiters")} to="/recruiters">Recruiters</Link>
+            <Link className={linkClass("/interviews")} to="/interviews">Interviews</Link>
             <span className="navbar-divider" aria-hidden="true" />
             <Link className={linkClass("/truth")} to="/truth">Truth Bank</Link>
             <Link className={linkClass("/gaps")} to="/gaps">Gaps</Link>

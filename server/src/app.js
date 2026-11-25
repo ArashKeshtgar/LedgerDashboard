@@ -764,6 +764,35 @@ export function createApp(cfg, deps = {}) {
     return { kept: tags.filter((t) => !isClosed(t)), dropped: tags.filter(isClosed) };
   }
 
+  // Strict mode checks the shape, not where the text went: the model has
+  // closed `reasoning` early and written the rest of the call into it as
+  // markup (`</reasoning><parameter name="gaps">[...]`), leaving gaps and
+  // gap_tags as valid empty arrays (FIS, 2026-11-25: a 46% score with no
+  // gaps shown). Take the arrays back out of the text; if that fails, refuse
+  // to save rather than store a low score with no reasons.
+  const LEAK_RE = /<\/?(?:parameter|reasoning|invoke)\b/;
+  function recoverLeakedFields(input) {
+    const a = { ...input };
+    if (typeof a.reasoning !== "string" || !LEAK_RE.test(a.reasoning)) return a;
+    const text = a.reasoning;
+    for (const field of ["gaps", "gap_tags"]) {
+      if (Array.isArray(a[field]) && a[field].length) continue;
+      const m = text.match(new RegExp(`<parameter name="${field}">([\\s\\S]*?)</parameter>`));
+      if (!m) continue;
+      try {
+        const value = JSON.parse(m[1]);
+        if (Array.isArray(value) && value.every((v) => typeof v === "string")) a[field] = value;
+      } catch {
+        // left empty; the check below refuses the analysis
+      }
+    }
+    a.reasoning = text.slice(0, text.search(LEAK_RE)).trim();
+    if (!a.reasoning || !(a.gaps || []).length || !(a.gap_tags || []).length) {
+      throw new Error("Analysis came back malformed (fields inside the reasoning text) — nothing was saved, try again");
+    }
+    return a;
+  }
+
   // Last check even under strict mode: a truncated or refused response can
   // still come back incomplete, and it should fail loudly instead of saving
   // a draft row with no gap tags.
@@ -773,7 +802,7 @@ export function createApp(cfg, deps = {}) {
     }
     const toolUse = message.content.find((b) => b.type === "tool_use");
     if (!toolUse) throw new Error("Model did not return a structured analysis");
-    const a = toolUse.input;
+    const a = recoverLeakedFields(toolUse.input);
     const gaps = Array.isArray(a.gaps) ? a.gaps : [];
     const allTags = toGapTagList(a.gap_tags);
     if (gaps.length > 0 && allTags.length === 0) {

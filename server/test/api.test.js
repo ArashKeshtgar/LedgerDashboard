@@ -417,6 +417,39 @@ describe("resume engine", () => {
     expect((await (await server.call("GET", "/api/applications")).json()).length).toBe(before);
   });
 
+  it("analyze recovers gaps the model wrote inside the reasoning text", async () => {
+    const anthropic = fakeAnthropic(() => ({
+      base_variant: "itsupport", match_score: 46, recommendation: "apply_with_caveats",
+      reasoning: 'Fintech role.</reasoning>\n<parameter name="gaps">["No Interac experience."]</parameter>\n' +
+        '<parameter name="gap_tags">["fintech-payments-domain"]</parameter>\n',
+      gaps: [], gap_tags: [],
+    }));
+    server = await start(testConfig(data.root), { anthropic });
+    const res = await server.call("POST", "/api/packages/analyze", {
+      body: { company: "FIS", role: "Analyst", postingText: "Interac." },
+    });
+    expect(res.status).toBe(200);
+    const { folder } = await res.json();
+    const row = await (await server.call("GET", `/api/applications/${folder}`)).json();
+    expect(row.gap_tags).toBe("fintech-payments-domain");
+    expect(row.analysis.reasoning).toBe("Fintech role.");
+    expect(row.analysis.gaps).toEqual(["No Interac experience."]);
+  });
+
+  it("analyze saves nothing when leaked fields can't be recovered", async () => {
+    const anthropic = fakeAnthropic(() => ({
+      base_variant: "itsupport", match_score: 46, recommendation: "skip",
+      reasoning: 'Weak.</reasoning><parameter name="gaps">[not json', gaps: [], gap_tags: [],
+    }));
+    server = await start(testConfig(data.root), { anthropic });
+    const before = (await (await server.call("GET", "/api/applications")).json()).length;
+    const res = await server.call("POST", "/api/packages/analyze", {
+      body: { company: "FIS", role: "Analyst", postingText: "Interac." },
+    });
+    expect(res.status).toBe(500);
+    expect((await (await server.call("GET", "/api/applications")).json()).length).toBe(before);
+  });
+
   it("reanalyze re-scores a draft's saved posting and keeps its variant", async () => {
     let call = 0;
     const anthropic = fakeAnthropic(() => (++call === 1

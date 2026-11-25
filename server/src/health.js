@@ -58,7 +58,7 @@ const NUMBER_RE = /\d[\d,]*(?:\+|%)?/g;
 // Mirrors validate.py's KNOWN_PRODUCT_VERSION_RE plus years/dates, which a
 // bullet never has to restate.
 const NOT_A_CLAIM_RE =
-  /\b(?:Microsoft|Office)\s+365\b|\bWindows\s+(?:10|11)\b|\bSQL\s+Server\s+20\d{2}\b|\.NET(?:\s+Core)?\s+(?:[5-9]|10)\b|\bAZ-\d{3}\b|\b(?:19|20)\d{2}(?:-\d{2}(?:-\d{2})?)?\b|\b[0-9a-f]{7,40}\b/gi;
+  /\b(?:Microsoft|Office)\s+365\b|\bWindows\s+(?:10|11)\b|\bSQL\s+Server\s+20\d{2}\b|\.NET(?:\s+Core)?\s+(?:[5-9]|10)\b|\.NET\s+Framework\s+\d(?:\.\d+)*|\bAZ-\d{3}\b|\b[2-6]G\b|\bHL7\b|\bSHA-?(?:1|256|384|512)\b|\b(?:19|20)\d{2}(?:-\d{2}(?:-\d{2})?)?\b|\b[0-9a-f]{7,40}\b/gi;
 
 const isBullet = (f) =>
   (f.id.startsWith("proj.") || f.id.startsWith("exp.")) &&
